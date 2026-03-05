@@ -7,6 +7,7 @@
             "state": {
               "auto": "mdi:fan-auto",
               "quiet": "mdi:fan-chevron-down",
+              "silence": "mdi:fan-chevron-down",
               "1": "mdi:numeric-1",
               "2": "mdi:numeric-2",
               "3": "mdi:numeric-3",
@@ -22,8 +23,9 @@
               "floorheatingairflow": "mdi:arrow-right-bottom",
               "off": "mdi:arrow-oscillating-off",
               "vertical": "mdi:arrow-up-down",
-              "horizontal": "mdi:arrow-right-bottom",
-              "both": "mdi:rotate-3d"
+              "horizontal": "mdi:arrow-left-right",
+              "both": "mdi:rotate-3d",
+              "3d": "mdi:rotate-3d"
             }
           }
         }
