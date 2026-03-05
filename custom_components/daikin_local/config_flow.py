@@ -14,8 +14,20 @@ from pydaikin.exceptions import DaikinException
 from pydaikin.factory import DaikinFactory
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
-from homeassistant.const import CONF_API_KEY, CONF_HOST, CONF_PASSWORD, CONF_UUID
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+    callback,
+)
+from homeassistant.const import (
+    CONF_API_KEY,
+    CONF_HOST,
+    CONF_PASSWORD,
+    CONF_TIMEOUT,
+    CONF_UUID,
+)
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from homeassistant.util.ssl import client_context_no_verify
@@ -34,6 +46,12 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
         """Initialize the Daikin config flow."""
         self.host: str | None = None
 
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlowHandler:
+        """Get the options flow for this handler."""
+        return OptionsFlowHandler(config_entry)
+
     @property
     def schema(self) -> vol.Schema:
         """Return current schema."""
@@ -42,6 +60,7 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_HOST, default=self.host): str,
                 vol.Optional(CONF_API_KEY): str,
                 vol.Optional(CONF_PASSWORD): str,
+                vol.Optional(CONF_TIMEOUT, default=TIMEOUT_SEC): int,
             }
         )
 
@@ -52,6 +71,7 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
         key: str | None = None,
         uuid: str | None = None,
         password: str | None = None,
+        timeout: int = TIMEOUT_SEC,
     ) -> ConfigFlowResult:
         """Register new entry."""
         if not self.unique_id:
@@ -66,11 +86,16 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
                 CONF_API_KEY: key,
                 CONF_UUID: uuid,
                 CONF_PASSWORD: password,
+                CONF_TIMEOUT: timeout,
             },
         )
 
     async def _create_device(
-        self, host: str, key: str | None = None, password: str | None = None
+        self,
+        host: str,
+        key: str | None = None,
+        password: str | None = None,
+        timeout: int = TIMEOUT_SEC,
     ) -> ConfigFlowResult:
         """Create device."""
         # BRP07Cxx devices needs uuid together with key
@@ -84,7 +109,7 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
             password = None
 
         try:
-            async with asyncio.timeout(TIMEOUT_SEC):
+            async with asyncio.timeout(timeout):
                 device: Appliance = await DaikinFactory(
                     host,
                     async_get_clientsession(self.hass),
@@ -122,7 +147,7 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
             )
 
         mac = device.mac
-        return await self._create_entry(host, mac, key, uuid, password)
+        return await self._create_entry(host, mac, key, uuid, password, timeout)
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -141,6 +166,7 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
             user_input[CONF_HOST],
             user_input.get(CONF_API_KEY),
             user_input.get(CONF_PASSWORD),
+            user_input.get(CONF_TIMEOUT, TIMEOUT_SEC),
         )
 
     async def async_step_zeroconf(
@@ -162,3 +188,33 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
         self._abort_if_unique_id_configured()
         self.host = discovery_info.host
         return await self.async_step_user()
+
+
+class OptionsFlowHandler(OptionsFlow):
+    """Handle options flow."""
+
+    def __init__(self, config_entry: ConfigEntry) -> None:
+        """Initialize options flow."""
+        self.config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage the options."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        CONF_TIMEOUT,
+                        default=self.config_entry.options.get(
+                            CONF_TIMEOUT,
+                            self.config_entry.data.get(CONF_TIMEOUT, TIMEOUT_SEC),
+                        ),
+                    ): int,
+                }
+            ),
+        )

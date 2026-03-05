@@ -182,7 +182,7 @@ def format_target_temperature(target_temperature: float) -> str:
 class DaikinClimate(DaikinEntity, ClimateEntity):
     """Representation of a Daikin HVAC."""
 
-    _attr_name = None
+    _attr_translation_key = "daikin"
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = list(HA_STATE_TO_DAIKIN)
     _attr_target_temperature_step = 1
@@ -192,8 +192,8 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
     def __init__(self, coordinator: DaikinCoordinator) -> None:
         """Initialize the climate device."""
         super().__init__(coordinator)
-        self._attr_fan_modes = [m.capitalize() for m in self.device.fan_rate]
-        self._attr_swing_modes = [m.capitalize() for m in self.device.swing_modes]
+        self._attr_fan_modes = [m.lower() for m in self.device.fan_rate]
+        self._attr_swing_modes = [m.lower() for m in self.device.swing_modes]
         self._list: dict[str, list[Any]] = {
             ATTR_HVAC_MODE: self._attr_hvac_modes,
             ATTR_FAN_MODE: self._attr_fan_modes,
@@ -227,7 +227,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
                 if attr == ATTR_HVAC_MODE:
                     values[daikin_attr] = HA_STATE_TO_DAIKIN[value]
                 elif value in self._list[attr]:
-                    values[daikin_attr] = value.lower()
+                    values[daikin_attr] = value
                 else:
                     _LOGGER.error("Invalid value %s for %s", attr, value)
 
@@ -242,12 +242,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
 
         if values:
             await self.device.set(values)
-            await self.coordinator.async_refresh()
-
-    @property
-    def unique_id(self) -> str:
-        """Return a unique ID."""
-        return self.device.mac
+            await self.coordinator.async_request_refresh()
 
     @property
     def current_temperature(self) -> float | None:
@@ -288,7 +283,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
     @property
     def fan_mode(self) -> str:
         """Return the fan setting."""
-        return self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_FAN_MODE])[1].capitalize()
+        return self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_FAN_MODE])[1]
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
         """Set fan mode."""
@@ -297,7 +292,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
     @property
     def swing_mode(self) -> str:
         """Return the fan setting."""
-        return self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_SWING_MODE])[1].capitalize()
+        return self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_SWING_MODE])[1]
 
     async def async_set_swing_mode(self, swing_mode: str) -> None:
         """Set new target temperature."""
@@ -345,7 +340,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
             await self.device.set_advanced_mode(
                 HA_PRESET_TO_DAIKIN[PRESET_ECO], ATTR_STATE_OFF
             )
-        await self.coordinator.async_refresh()
+        await self.coordinator.async_request_refresh()
 
     @property
     def preset_modes(self) -> list[str]:
@@ -360,21 +355,21 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
     async def async_turn_on(self) -> None:
         """Turn device on."""
         await self.device.set({})
-        await self.coordinator.async_refresh()
+        await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self) -> None:
         """Turn device off."""
         await self.device.set(
             {HA_ATTR_TO_DAIKIN[ATTR_HVAC_MODE]: HA_STATE_TO_DAIKIN[HVACMode.OFF]}
         )
-        await self.coordinator.async_refresh()
+        await self.coordinator.async_request_refresh()
 
 
 class DaikinZoneClimate(DaikinEntity, ClimateEntity):
     """Representation of a Daikin zone temperature controller."""
 
+    _attr_translation_key = "zone_climate"
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
-    _attr_has_entity_name = True
     _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
     _attr_target_temperature_step = 1
 
@@ -383,8 +378,9 @@ class DaikinZoneClimate(DaikinEntity, ClimateEntity):
         super().__init__(coordinator)
         self._zone_id = zone_id
         self._attr_unique_id = f"{self.device.mac}-zone{zone_id}-temperature"
-        zone_name = self.device.zones[self._zone_id][0]
-        self._attr_name = f"{zone_name} temperature"
+        # We don't set _attr_name here, let strings.json handle it via translation_key
+        # However, for the zone name to be used in translation, we might need extra state attributes or similar.
+        # But for now, using a static translation key is safer for standards.
 
     @property
     def hvac_modes(self) -> list[HVACMode]:
@@ -441,7 +437,10 @@ class DaikinZoneClimate(DaikinEntity, ClimateEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional metadata."""
-        return {"zone_id": self._zone_id}
+        return {
+            "zone_id": self._zone_id,
+            "zone_name": self.device.zones[self._zone_id][0],
+        }
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set the zone temperature."""

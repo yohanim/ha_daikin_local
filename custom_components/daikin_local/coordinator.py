@@ -6,6 +6,7 @@ import logging
 from pydaikin.daikin_base import Appliance
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_TIMEOUT
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
@@ -23,12 +24,15 @@ class DaikinCoordinator(DataUpdateCoordinator[None]):
         self, hass: HomeAssistant, entry: DaikinConfigEntry, device: Appliance
     ) -> None:
         """Initialize global Daikin data updater."""
+        timeout = entry.options.get(
+            CONF_TIMEOUT, entry.data.get(CONF_TIMEOUT, TIMEOUT_SEC)
+        )
         super().__init__(
             hass,
             _LOGGER,
             config_entry=entry,
             name=device.values.get("name", DOMAIN),
-            update_interval=timedelta(seconds=TIMEOUT_SEC),
+            update_interval=timedelta(seconds=timeout),
         )
         self.device = device
 

@@ -24,6 +24,8 @@ ATTR_STATE_OFF = "off"
 KEY_MAC = "mac"
 KEY_IP = "ip"
 
+CONF_TIMEOUT = "timeout"
+
 ZONE_NAME_UNCONFIGURED = "-"
 
 TIMEOUT_SEC = 30

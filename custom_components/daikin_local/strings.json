@@ -15,14 +15,56 @@
         "data": {
           "api_key": "[%key:common::config_flow::data::api_key%]",
           "host": "[%key:common::config_flow::data::host%]",
-          "password": "[%key:common::config_flow::data::password%]"
+          "password": "[%key:common::config_flow::data::password%]",
+          "timeout": "Request timeout (seconds)"
         },
         "description": "Enter the IP address of your Daikin AC.\nIf your device is set up with a password or API-key, please use that, in all other cases leave the fields blank.",
         "title": "Configure Daikin AC"
+      },
+      "init": {
+        "data": {
+          "timeout": "Request timeout (seconds)"
+        },
+        "title": "Configure Daikin AC options"
       }
     }
   },
   "entity": {
+    "climate": {
+      "daikin": {
+        "name": "Daikin AC",
+        "state_attributes": {
+          "fan_mode": {
+            "name": "Fan speed",
+            "state": {
+              "auto": "Auto",
+              "quiet": "Quiet",
+              "1": "1",
+              "2": "2",
+              "3": "3",
+              "4": "4",
+              "5": "5"
+            }
+          },
+          "swing_mode": {
+            "name": "Swing mode",
+            "state": {
+              "stop": "Stop",
+              "swing": "Swing",
+              "windnice": "Windnice",
+              "floorheatingairflow": "Floor Heating Airflow",
+              "off": "Off",
+              "vertical": "Vertical",
+              "horizontal": "Horizontal",
+              "both": "Both"
+            }
+          }
+        }
+      },
+      "zone_climate": {
+        "name": "Zone temperature"
+      }
+    },
     "sensor": {
       "compressor_energy_consumption": {
         "name": "Compressor energy consumption"
@@ -55,6 +97,12 @@
     "switch": {
       "toggle": {
         "name": "Power"
+      },
+      "streamer": {
+        "name": "Streamer"
+      },
+      "zone": {
+        "name": "Zone"
       }
     }
   },
