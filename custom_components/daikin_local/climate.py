@@ -192,8 +192,8 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
     def __init__(self, coordinator: DaikinCoordinator) -> None:
         """Initialize the climate device."""
         super().__init__(coordinator)
-        self._attr_fan_modes = self.device.fan_rate
-        self._attr_swing_modes = self.device.swing_modes
+        self._attr_fan_modes = [m.capitalize() for m in self.device.fan_rate]
+        self._attr_swing_modes = [m.capitalize() for m in self.device.swing_modes]
         self._list: dict[str, list[Any]] = {
             ATTR_HVAC_MODE: self._attr_hvac_modes,
             ATTR_FAN_MODE: self._attr_fan_modes,
@@ -288,7 +288,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
     @property
     def fan_mode(self) -> str:
         """Return the fan setting."""
-        return self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_FAN_MODE])[1]
+        return self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_FAN_MODE])[1].capitalize()
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
         """Set fan mode."""
@@ -297,7 +297,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
     @property
     def swing_mode(self) -> str:
         """Return the fan setting."""
-        return self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_SWING_MODE])[1]
+        return self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_SWING_MODE])[1].capitalize()
 
     async def async_set_swing_mode(self, swing_mode: str) -> None:
         """Set new target temperature."""
