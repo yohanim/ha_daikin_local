@@ -142,7 +142,7 @@ def _system_target_temperature(device: Appliance) -> float | None:
         return None
     try:
         return float(target)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return None
 
 
@@ -152,7 +152,7 @@ def _zone_temperature_from_list(values: list[str], zone_id: int) -> float | None
         return None
     try:
         return float(values[zone_id])
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return None
 
 
@@ -237,7 +237,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
                     values[HA_ATTR_TO_DAIKIN[ATTR_TARGET_TEMPERATURE]] = (
                         format_target_temperature(value)
                     )
-                except ValueError:
+                except (ValueError):
                     _LOGGER.error("Invalid temperature %s", value)
 
         if values:
@@ -288,7 +288,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
     @property
     def fan_mode(self) -> str:
         """Return the fan setting."""
-        return self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_FAN_MODE])[1].title()
+        return self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_FAN_MODE])[1]
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
         """Set fan mode."""
@@ -297,7 +297,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
     @property
     def swing_mode(self) -> str:
         """Return the fan setting."""
-        return self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_SWING_MODE])[1].title()
+        return self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_SWING_MODE])[1]
 
     async def async_set_swing_mode(self, swing_mode: str) -> None:
         """Set new target temperature."""
