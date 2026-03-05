@@ -32,7 +32,7 @@
   "entity": {
     "climate": {
       "daikin": {
-        "name": "Daikin AC",
+        "name": "Daikin Local",
         "state_attributes": {
           "fan_mode": {
             "name": "Fan speed",
@@ -89,6 +89,9 @@
       },
       "outside_temperature": {
         "name": "Outside temperature"
+      },
+      "humidity": {
+        "name": "Humidity"
       },
       "target_humidity": {
         "name": "Target humidity"

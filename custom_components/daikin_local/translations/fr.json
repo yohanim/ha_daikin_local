@@ -1,0 +1,135 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]"
+    },
+    "error": {
+      "api_password": "Authentification invalide, utilisez soit une clé API, soit un mot de passe.",
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
+      "unknown": "[%key:common::config_flow::error::unknown%]"
+    },
+    "step": {
+      "user": {
+        "data": {
+          "api_key": "[%key:common::config_flow::data::api_key%]",
+          "host": "[%key:common::config_flow::data::host%]",
+          "password": "[%key:common::config_flow::data::password%]",
+          "timeout": "Délai d'expiration (secondes)"
+        },
+        "description": "Entrez l'adresse IP de votre unité Daikin.\nSi votre appareil est configuré avec un mot de passe ou une clé API, veuillez les renseigner, sinon laissez les champs vides.",
+        "title": "Configurer Daikin"
+      },
+      "init": {
+        "data": {
+          "timeout": "Délai d'expiration (secondes)"
+        },
+        "title": "Options Daikin"
+      }
+    }
+  },
+  "entity": {
+    "climate": {
+      "daikin": {
+        "name": "Climatisation",
+        "state_attributes": {
+          "fan_mode": {
+            "name": "Ventilation",
+            "state": {
+              "auto": "Auto",
+              "quiet": "Silencieux",
+              "1": "1",
+              "2": "2",
+              "3": "3",
+              "4": "4",
+              "5": "5"
+            }
+          },
+          "swing_mode": {
+            "name": "Oscillation",
+            "state": {
+              "stop": "Arrêt",
+              "swing": "Oscillation",
+              "windnice": "Flux confort",
+              "floorheatingairflow": "Flux sol",
+              "off": "Off",
+              "vertical": "Vertical",
+              "horizontal": "Horizontal",
+              "both": "3D"
+            }
+          }
+        }
+      },
+      "zone_climate": {
+        "name": "Température de zone"
+      }
+    },
+    "sensor": {
+      "inside_temperature": {
+        "name": "Température intérieure"
+      },
+      "outside_temperature": {
+        "name": "Température extérieure"
+      },
+      "humidity": {
+        "name": "Humidité"
+      },
+      "target_humidity": {
+        "name": "Humidité cible"
+      },
+      "compressor_estimated_power_consumption": {
+        "name": "Puissance estimée du compresseur"
+      },
+      "cool_energy_consumption": {
+        "name": "Consommation froid"
+      },
+      "heat_energy_consumption": {
+        "name": "Consommation chaud"
+      },
+      "energy_consumption": {
+        "name": "Consommation aujourd'hui"
+      },
+      "compressor_frequency": {
+        "name": "Fréquence du compresseur"
+      },
+      "compressor_energy_consumption": {
+        "name": "Énergie totale du compresseur"
+      }
+    },
+    "switch": {
+      "toggle": {
+        "name": "Alimentation"
+      },
+      "streamer": {
+        "name": "Streamer"
+      },
+      "zone": {
+        "name": "Zone"
+      }
+    }
+  },
+  "exceptions": {
+    "zone_hvac_mode_unsupported": {
+      "message": "La température de zone ne peut être modifiée que lorsque le mode principal est chaud ou froid."
+    },
+    "zone_hvac_read_only": {
+      "message": "Le mode HVAC de la zone est contrôlé par l'unité principale."
+    },
+    "zone_inactive": {
+      "message": "La zone {zone_id} n'est pas active."
+    },
+    "zone_missing": {
+      "message": "La zone {zone_id} n'existe pas."
+    },
+    "zone_parameters_unavailable": {
+      "message": "Cet appareil n'expose pas les paramètres de température de zone requis."
+    },
+    "zone_set_failed": {
+      "message": "Échec du réglage de la température de zone."
+    },
+    "zone_temperature_missing": {
+      "message": "Fournissez une valeur de température lors du réglage d'une zone."
+    }
+  }
+}

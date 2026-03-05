@@ -182,6 +182,7 @@ def format_target_temperature(target_temperature: float) -> str:
 class DaikinClimate(DaikinEntity, ClimateEntity):
     """Representation of a Daikin HVAC."""
 
+    _attr_name = None
     _attr_translation_key = "daikin"
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = list(HA_STATE_TO_DAIKIN)
@@ -192,6 +193,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
     def __init__(self, coordinator: DaikinCoordinator) -> None:
         """Initialize the climate device."""
         super().__init__(coordinator)
+        self._attr_unique_id = self.device.mac
         self._attr_fan_modes = [m.lower() for m in self.device.fan_rate]
         self._attr_swing_modes = [m.lower() for m in self.device.swing_modes]
         self._list: dict[str, list[Any]] = {
@@ -379,8 +381,6 @@ class DaikinZoneClimate(DaikinEntity, ClimateEntity):
         self._zone_id = zone_id
         self._attr_unique_id = f"{self.device.mac}-zone{zone_id}-temperature"
         # We don't set _attr_name here, let strings.json handle it via translation_key
-        # However, for the zone name to be used in translation, we might need extra state attributes or similar.
-        # But for now, using a static translation key is safer for standards.
 
     @property
     def hvac_modes(self) -> list[HVACMode]:
