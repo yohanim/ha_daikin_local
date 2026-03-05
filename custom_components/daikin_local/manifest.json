@@ -1,0 +1,12 @@
+{
+  "domain": "daikin_local",
+  "name": "Daikin Local",
+  "codeowners": ["@yoh_anim"],
+  "config_flow": true,
+  "documentation": "https://github.com/yohanim/ha_daikin_local",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "loggers": ["pydaikin"],
+  "requirements": ["pydaikin==2.18.1"],
+  "zeroconf": ["_dkapi._tcp.local."]
+}
