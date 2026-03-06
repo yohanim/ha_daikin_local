@@ -181,7 +181,7 @@ class FlowHandler(
 
     async def _finish_entry(self) -> ConfigFlowResult:
         """Create or update the entry."""
-        if self.source == "reconfigure":
+        if self.context.get("source") == "reconfigure":
             entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
             return self.async_update_reload_and_abort(
                 entry, data=self.entry_data, reason="reconfigure_successful"
@@ -253,7 +253,7 @@ class OptionsFlowHandler(OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        # Build schema using self.config_entry (available in OptionsFlow)
+        # Build schema using self.config_entry
         schema_dict = {
             vol.Optional(
                 CONF_TIMEOUT,
@@ -264,8 +264,10 @@ class OptionsFlowHandler(OptionsFlow):
             ): int,
         }
 
-        # Add cloud options if cloud is configured
-        if self.config_entry.data.get(CONF_CLOUD_DEVICE_ID):
+        # Show cloud options if device_id is present in data OR options
+        cloud_id = self.config_entry.data.get(CONF_CLOUD_DEVICE_ID) or self.config_entry.options.get(CONF_CLOUD_DEVICE_ID)
+        
+        if cloud_id:
             schema_dict[vol.Optional(
                 CONF_CLOUD_SCAN_INTERVAL_DAY,
                 default=self.config_entry.options.get(
