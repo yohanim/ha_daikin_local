@@ -189,7 +189,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
     _attr_translation_key = "daikin"
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = list(HA_STATE_TO_DAIKIN)
-    _attr_target_temperature_step = 1
+    _attr_target_temperature_step = 0.5
     _attr_fan_modes: list[str]
     _attr_swing_modes: list[str]
 
@@ -295,8 +295,11 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
     @property
     def fan_mode(self) -> str | None:
         """Return the fan setting."""
-        if (val := self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_FAN_MODE])[1]) is not None:
-            return val.lower()
+        val = self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_FAN_MODE])[1]
+        if val is not None:
+            val = val.lower()
+            if val in self._attr_fan_modes:
+                return val
         return None
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
@@ -306,8 +309,11 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
     @property
     def swing_mode(self) -> str | None:
         """Return the swing setting."""
-        if (val := self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_SWING_MODE])[1]) is not None:
-            return val.lower()
+        val = self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_SWING_MODE])[1]
+        if val is not None:
+            val = val.lower()
+            if val in self._attr_swing_modes:
+                return val
         return None
 
     async def async_set_swing_mode(self, swing_mode: str) -> None:
@@ -385,7 +391,7 @@ class DaikinZoneClimate(DaikinEntity, ClimateEntity):
     _attr_translation_key = "zone_climate"
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
-    _attr_target_temperature_step = 1
+    _attr_target_temperature_step = 0.5
 
     def __init__(self, coordinator: DaikinCoordinator, zone_id: int) -> None:
         """Initialize the zone climate entity."""
