@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import config_entry_oauth2_helper
+import homeassistant.helpers.config_entry_oauth2_helper as config_entry_oauth2_helper
 
 from .const import DAIKIN_ONECTA_AUTH_URL, DAIKIN_ONECTA_TOKEN_URL
 

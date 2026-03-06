@@ -7,7 +7,7 @@ from aiohttp import ClientSession
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.network import get_url
-from homeassistant.helpers import config_entry_oauth2_helper
+import homeassistant.helpers.config_entry_oauth2_helper as config_entry_oauth2_helper
 
 from .const import DAIKIN_ONECTA_API_URL
 
