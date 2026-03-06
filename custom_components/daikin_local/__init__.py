@@ -39,7 +39,6 @@ PLATFORMS = [Platform.CLIMATE, Platform.SENSOR, Platform.SWITCH]
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     """Set up the Daikin Local component."""
-    await oauth2.async_register_implementation(hass)
     return True
 
 

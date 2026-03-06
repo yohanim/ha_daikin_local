@@ -110,6 +110,17 @@ class FlowHandler(
             user_input.get(CONF_TIMEOUT, TIMEOUT_SEC),
         )
 
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle reconfiguration of the integration (e.g. to add Cloud)."""
+        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        self.host = entry.data[CONF_HOST]
+        self.entry_data = dict(entry.data)
+        # Set unique id to ensure we update the correct entry
+        await self.async_set_unique_id(entry.unique_id)
+        return await self.async_step_cloud_confirm()
+
     async def _create_device(
         self,
         host: str,

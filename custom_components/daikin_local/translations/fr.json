@@ -25,7 +25,7 @@
         "data": {
           "enable_cloud": "Activer les fonctions Cloud (Onecta) pour le mode Flux confort"
         },
-        "description": "Voulez-vous activer les fonctions Cloud pour supporter le mode 'Flux confort' (WindNice) ? Vous aurez besoin de vos identifiants Daikin Developer.",
+        "description": "Voulez-vous activer les fonctions Cloud pour supporter le mode 'Flux confort' (WindNice) ? Vous aurez besoin de vos identifiants Daikin Developer. Vous pourrez aussi l'ajouter plus tard en reconfigurant l'intégration.",
         "title": "Activer les fonctions Cloud"
       },
       "cloud_device": {

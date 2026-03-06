@@ -25,7 +25,7 @@
         "data": {
           "enable_cloud": "Enable Cloud features (Onecta) for windNice mode"
         },
-        "description": "Do you want to enable Cloud features to support 'windNice' (Comfort Airflow)? You will need Daikin Developer credentials.",
+        "description": "Do you want to enable Cloud features to support 'windNice' (Comfort Airflow)? You will need Daikin Developer credentials. You can also add this later by reconfiguring the integration.",
         "title": "Enable Cloud Features"
       },
       "cloud_device": {
