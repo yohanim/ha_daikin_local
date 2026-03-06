@@ -34,6 +34,7 @@ from .const import (
     ATTR_STATE_ON,
     ATTR_TARGET_TEMPERATURE,
     DOMAIN,
+    SWING_WINDNICE,
     ZONE_NAME_UNCONFIGURED,
 )
 from .coordinator import DaikinConfigEntry, DaikinCoordinator

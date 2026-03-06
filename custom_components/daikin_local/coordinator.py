@@ -9,6 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_TIMEOUT
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+
 from .const import (
     DOMAIN, 
     TIMEOUT_SEC, 
@@ -59,20 +60,20 @@ class DaikinCoordinator(DataUpdateCoordinator[None]):
         """Calculate current cloud interval in seconds."""
         import datetime
         now = datetime.datetime.now().time()
-
+        
         day_start = self.config_entry.options.get(CONF_CLOUD_DAY_START, DEFAULT_CLOUD_DAY_START)
         day_end = self.config_entry.options.get(CONF_CLOUD_DAY_END, DEFAULT_CLOUD_DAY_END)
-
+        
         try:
             start_t = datetime.datetime.strptime(day_start, "%H:%M").time()
             end_t = datetime.datetime.strptime(day_end, "%H:%M").time()
-
+            
             # Normal case: 07:00 -> 23:00
             if start_t < end_t:
                 is_day = start_t <= now <= end_t
             else: # Night case: 22:00 -> 06:00
                 is_day = now >= start_t or now <= end_t
-
+                
             interval_min = self.config_entry.options.get(
                 CONF_CLOUD_SCAN_INTERVAL_DAY if is_day else CONF_CLOUD_SCAN_INTERVAL_NIGHT,
                 DEFAULT_CLOUD_SCAN_INTERVAL_DAY if is_day else DEFAULT_CLOUD_SCAN_INTERVAL_NIGHT
@@ -90,13 +91,12 @@ class DaikinCoordinator(DataUpdateCoordinator[None]):
         import time
         now = time.time()
         interval = self._get_cloud_interval()
-
+        
         if self.cloud_api and (now - self._last_cloud_update >= interval or self._last_cloud_update == 0):
             _LOGGER.debug("Polling Daikin Cloud (interval: %ds) for device %s", interval, self.cloud_api.device_id)
             status = await self.cloud_api.async_get_device_status()
             if status:
                 self._last_cloud_update = now
-...
                 try:
                     # Parse the windNice value from the complex JSON structure
                     for mp in status.get("managementPoints", []):
@@ -106,4 +106,3 @@ class DaikinCoordinator(DataUpdateCoordinator[None]):
                                     self.wind_nice_active = char.get("value") == "on"
                 except Exception as err:
                     _LOGGER.error("Error parsing cloud status: %s", err)
-
