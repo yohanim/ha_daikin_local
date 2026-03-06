@@ -61,6 +61,7 @@ DAIKIN_TO_HA_STATE = {
     "dry": HVACMode.DRY,
     "cool": HVACMode.COOL,
     "hot": HVACMode.HEAT,
+    "heat": HVACMode.HEAT,
     "auto": HVACMode.HEAT_COOL,
     "off": HVACMode.OFF,
 }
@@ -68,6 +69,8 @@ DAIKIN_TO_HA_STATE = {
 HA_STATE_TO_CURRENT_HVAC = {
     HVACMode.COOL: HVACAction.COOLING,
     HVACMode.HEAT: HVACAction.HEATING,
+    HVACMode.DRY: HVACAction.DRYING,
+    HVACMode.FAN_ONLY: HVACAction.FAN,
     HVACMode.OFF: HVACAction.OFF,
 }
 
@@ -227,11 +230,12 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
 
             if (daikin_attr := HA_ATTR_TO_DAIKIN.get(attr)) is not None:
                 if attr == ATTR_HVAC_MODE:
+                    values["pow"] = "0" if value == HVACMode.OFF else "1"
                     values[daikin_attr] = HA_STATE_TO_DAIKIN[value]
                 elif value in self._list[attr]:
                     values[daikin_attr] = value
                 else:
-                    _LOGGER.error("Invalid value %s for %s", attr, value)
+                    _LOGGER.error("Invalid value %s for %s", value, attr)
 
             # temperature
             elif attr == ATTR_TEMPERATURE:
@@ -263,6 +267,8 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
     @property
     def hvac_action(self) -> HVACAction | None:
         """Return the current state."""
+        if not self.device.power:
+            return HVACAction.OFF
         ret = HA_STATE_TO_CURRENT_HVAC.get(self.hvac_mode)
         if (
             ret in (HVACAction.COOLING, HVACAction.HEATING)
@@ -275,26 +281,34 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
     @property
     def hvac_mode(self) -> HVACMode:
         """Return current operation ie. heat, cool, idle."""
+        if not self.device.power:
+            return HVACMode.OFF
         daikin_mode = self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_HVAC_MODE])[1]
-        return DAIKIN_TO_HA_STATE.get(daikin_mode, HVACMode.HEAT_COOL)
+        return DAIKIN_TO_HA_STATE.get(
+            daikin_mode.lower() if daikin_mode else None, HVACMode.HEAT_COOL
+        )
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set HVAC mode."""
         await self._set({ATTR_HVAC_MODE: hvac_mode})
 
     @property
-    def fan_mode(self) -> str:
+    def fan_mode(self) -> str | None:
         """Return the fan setting."""
-        return self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_FAN_MODE])[1]
+        if (val := self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_FAN_MODE])[1]) is not None:
+            return val.lower()
+        return None
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
         """Set fan mode."""
         await self._set({ATTR_FAN_MODE: fan_mode})
 
     @property
-    def swing_mode(self) -> str:
-        """Return the fan setting."""
-        return self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_SWING_MODE])[1]
+    def swing_mode(self) -> str | None:
+        """Return the swing setting."""
+        if (val := self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_SWING_MODE])[1]) is not None:
+            return val.lower()
+        return None
 
     async def async_set_swing_mode(self, swing_mode: str) -> None:
         """Set new target temperature."""
@@ -356,14 +370,12 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
 
     async def async_turn_on(self) -> None:
         """Turn device on."""
-        await self.device.set({})
+        await self.device.set({"pow": "1"})
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self) -> None:
         """Turn device off."""
-        await self.device.set(
-            {HA_ATTR_TO_DAIKIN[ATTR_HVAC_MODE]: HA_STATE_TO_DAIKIN[HVACMode.OFF]}
-        )
+        await self.device.set({"pow": "0"})
         await self.coordinator.async_request_refresh()
 
 
@@ -390,8 +402,12 @@ class DaikinZoneClimate(DaikinEntity, ClimateEntity):
     @property
     def hvac_mode(self) -> HVACMode:
         """Return the current HVAC mode."""
+        if not self.device.power:
+            return HVACMode.OFF
         daikin_mode = self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_HVAC_MODE])[1]
-        return DAIKIN_TO_HA_STATE.get(daikin_mode, HVACMode.HEAT_COOL)
+        return DAIKIN_TO_HA_STATE.get(
+            daikin_mode.lower() if daikin_mode else None, HVACMode.HEAT_COOL
+        )
 
     @property
     def hvac_action(self) -> HVACAction | None:
