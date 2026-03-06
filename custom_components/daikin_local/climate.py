@@ -267,7 +267,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
     @property
     def hvac_action(self) -> HVACAction | None:
         """Return the current state."""
-        if not self.device.power:
+        if not self.device.values.get("pow") == "1":
             return HVACAction.OFF
         ret = HA_STATE_TO_CURRENT_HVAC.get(self.hvac_mode)
         if (
@@ -281,7 +281,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
     @property
     def hvac_mode(self) -> HVACMode:
         """Return current operation ie. heat, cool, idle."""
-        if not self.device.power:
+        if not self.device.values.get("pow") == "1":
             return HVACMode.OFF
         daikin_mode = self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_HVAC_MODE])[1]
         return DAIKIN_TO_HA_STATE.get(
@@ -402,7 +402,7 @@ class DaikinZoneClimate(DaikinEntity, ClimateEntity):
     @property
     def hvac_mode(self) -> HVACMode:
         """Return the current HVAC mode."""
-        if not self.device.power:
+        if not self.device.values.get("pow") == "1":
             return HVACMode.OFF
         daikin_mode = self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_HVAC_MODE])[1]
         return DAIKIN_TO_HA_STATE.get(
