@@ -11,7 +11,7 @@
       "invalid_auth": "Authentification invalide",
       "unknown": "Erreur inattendue"
     },
-    "step": {
+    "steps": {
       "user": {
         "data": {
           "api_key": "Clé API",
@@ -35,7 +35,11 @@
         },
         "description": "Veuillez entrer l'UUID de votre appareil tel qu'enregistré dans le Cloud Daikin Onecta.",
         "title": "Configuration Cloud de l'appareil"
-      },
+      }
+    }
+  },
+  "options": {
+    "steps": {
       "init": {
         "data": {
           "timeout": "Délai d'expiration (secondes)",
