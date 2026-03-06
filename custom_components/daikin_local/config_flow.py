@@ -213,9 +213,15 @@ class FlowHandler(
     async def async_step_cloud_device(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Ask for the Cloud Device ID."""
+        """Ask for the Cloud Device ID and scan intervals."""
         if user_input is not None:
-            self.entry_data[CONF_CLOUD_DEVICE_ID] = user_input[CONF_CLOUD_DEVICE_ID]
+            self.entry_data.update({
+                CONF_CLOUD_DEVICE_ID: user_input[CONF_CLOUD_DEVICE_ID],
+                CONF_CLOUD_SCAN_INTERVAL_DAY: user_input[CONF_CLOUD_SCAN_INTERVAL_DAY],
+                CONF_CLOUD_SCAN_INTERVAL_NIGHT: user_input[CONF_CLOUD_SCAN_INTERVAL_NIGHT],
+                CONF_CLOUD_DAY_START: user_input[CONF_CLOUD_DAY_START],
+                CONF_CLOUD_DAY_END: user_input[CONF_CLOUD_DAY_END],
+            })
             return await self._finish_entry()
 
         return self.async_show_form(
@@ -223,6 +229,18 @@ class FlowHandler(
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_CLOUD_DEVICE_ID): str,
+                    vol.Optional(
+                        CONF_CLOUD_SCAN_INTERVAL_DAY, default=DEFAULT_CLOUD_SCAN_INTERVAL_DAY
+                    ): int,
+                    vol.Optional(
+                        CONF_CLOUD_SCAN_INTERVAL_NIGHT, default=DEFAULT_CLOUD_SCAN_INTERVAL_NIGHT
+                    ): int,
+                    vol.Optional(
+                        CONF_CLOUD_DAY_START, default=DEFAULT_CLOUD_DAY_START
+                    ): str,
+                    vol.Optional(
+                        CONF_CLOUD_DAY_END, default=DEFAULT_CLOUD_DAY_END
+                    ): str,
                 }
             ),
         )
@@ -271,25 +289,37 @@ class OptionsFlowHandler(OptionsFlow):
             schema_dict[vol.Optional(
                 CONF_CLOUD_SCAN_INTERVAL_DAY,
                 default=self.config_entry.options.get(
-                    CONF_CLOUD_SCAN_INTERVAL_DAY, DEFAULT_CLOUD_SCAN_INTERVAL_DAY
+                    CONF_CLOUD_SCAN_INTERVAL_DAY,
+                    self.config_entry.data.get(
+                        CONF_CLOUD_SCAN_INTERVAL_DAY, DEFAULT_CLOUD_SCAN_INTERVAL_DAY
+                    ),
                 ),
             )] = int
             schema_dict[vol.Optional(
                 CONF_CLOUD_SCAN_INTERVAL_NIGHT,
                 default=self.config_entry.options.get(
-                    CONF_CLOUD_SCAN_INTERVAL_NIGHT, DEFAULT_CLOUD_SCAN_INTERVAL_NIGHT
+                    CONF_CLOUD_SCAN_INTERVAL_NIGHT,
+                    self.config_entry.data.get(
+                        CONF_CLOUD_SCAN_INTERVAL_NIGHT, DEFAULT_CLOUD_SCAN_INTERVAL_NIGHT
+                    ),
                 ),
             )] = int
             schema_dict[vol.Optional(
                 CONF_CLOUD_DAY_START,
                 default=self.config_entry.options.get(
-                    CONF_CLOUD_DAY_START, DEFAULT_CLOUD_DAY_START
+                    CONF_CLOUD_DAY_START,
+                    self.config_entry.data.get(
+                        CONF_CLOUD_DAY_START, DEFAULT_CLOUD_DAY_START
+                    ),
                 ),
             )] = str
             schema_dict[vol.Optional(
                 CONF_CLOUD_DAY_END,
                 default=self.config_entry.options.get(
-                    CONF_CLOUD_DAY_END, DEFAULT_CLOUD_DAY_END
+                    CONF_CLOUD_DAY_END,
+                    self.config_entry.data.get(
+                        CONF_CLOUD_DAY_END, DEFAULT_CLOUD_DAY_END
+                    ),
                 ),
             )] = str
 

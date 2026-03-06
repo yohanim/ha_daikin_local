@@ -31,9 +31,13 @@
       },
       "cloud_device": {
         "data": {
-          "cloud_device_id": "ID Cloud de l'appareil (UUID)"
+          "cloud_device_id": "ID Cloud de l'appareil (UUID)",
+          "cloud_scan_interval_day": "Intervalle de polling Cloud - Jour (minutes)",
+          "cloud_scan_interval_night": "Intervalle de polling Cloud - Nuit (minutes)",
+          "cloud_day_start": "Début de la période de jour (HH:MM)",
+          "cloud_day_end": "Fin de la période de jour (HH:MM)"
         },
-        "description": "Veuillez entrer l'UUID de votre appareil tel qu'enregistré dans le Cloud Daikin Onecta.",
+        "description": "Veuillez entrer l'UUID de votre appareil tel qu'enregistré dans le Cloud Daikin Onecta et configurer les intervalles de scrutation.",
         "title": "Configuration Cloud de l'appareil"
       }
     }

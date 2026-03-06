@@ -61,8 +61,14 @@ class DaikinCoordinator(DataUpdateCoordinator[None]):
         import datetime
         now = datetime.datetime.now().time()
         
-        day_start = self.config_entry.options.get(CONF_CLOUD_DAY_START, DEFAULT_CLOUD_DAY_START)
-        day_end = self.config_entry.options.get(CONF_CLOUD_DAY_END, DEFAULT_CLOUD_DAY_END)
+        day_start = self.config_entry.options.get(
+            CONF_CLOUD_DAY_START,
+            self.config_entry.data.get(CONF_CLOUD_DAY_START, DEFAULT_CLOUD_DAY_START)
+        )
+        day_end = self.config_entry.options.get(
+            CONF_CLOUD_DAY_END,
+            self.config_entry.data.get(CONF_CLOUD_DAY_END, DEFAULT_CLOUD_DAY_END)
+        )
         
         try:
             start_t = datetime.datetime.strptime(day_start, "%H:%M").time()
@@ -76,7 +82,10 @@ class DaikinCoordinator(DataUpdateCoordinator[None]):
                 
             interval_min = self.config_entry.options.get(
                 CONF_CLOUD_SCAN_INTERVAL_DAY if is_day else CONF_CLOUD_SCAN_INTERVAL_NIGHT,
-                DEFAULT_CLOUD_SCAN_INTERVAL_DAY if is_day else DEFAULT_CLOUD_SCAN_INTERVAL_NIGHT
+                self.config_entry.data.get(
+                    CONF_CLOUD_SCAN_INTERVAL_DAY if is_day else CONF_CLOUD_SCAN_INTERVAL_NIGHT,
+                    DEFAULT_CLOUD_SCAN_INTERVAL_DAY if is_day else DEFAULT_CLOUD_SCAN_INTERVAL_NIGHT
+                )
             )
             return interval_min * 60
         except Exception:

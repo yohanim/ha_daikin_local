@@ -31,9 +31,13 @@
       },
       "cloud_device": {
         "data": {
-          "cloud_device_id": "Daikin Cloud Device ID (UUID)"
+          "cloud_device_id": "Daikin Cloud Device ID (UUID)",
+          "cloud_scan_interval_day": "Cloud polling interval - Day (minutes)",
+          "cloud_scan_interval_night": "Cloud polling interval - Night (minutes)",
+          "cloud_day_start": "Day period start (HH:MM)",
+          "cloud_day_end": "Day period end (HH:MM)"
         },
-        "description": "Please enter the UUID of your device as registered in Daikin Onecta Cloud.",
+        "description": "Please enter the UUID of your device as registered in Daikin Onecta Cloud and set the polling intervals.",
         "title": "Cloud Device Configuration"
       }
     }
