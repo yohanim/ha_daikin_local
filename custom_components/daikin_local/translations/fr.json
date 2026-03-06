@@ -1,21 +1,22 @@
 {
   "config": {
     "abort": {
-      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
-      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]"
+      "already_configured": "L'appareil est déjà configuré",
+      "cannot_connect": "Échec de connexion",
+      "reconfigure_successful": "La reconfiguration a réussi"
     },
     "error": {
       "api_password": "Authentification invalide, utilisez soit une clé API, soit un mot de passe.",
-      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
-      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
-      "unknown": "[%key:common::config_flow::error::unknown%]"
+      "cannot_connect": "Échec de connexion",
+      "invalid_auth": "Authentification invalide",
+      "unknown": "Erreur inattendue"
     },
     "step": {
       "user": {
         "data": {
-          "api_key": "[%key:common::config_flow::data::api_key%]",
-          "host": "[%key:common::config_flow::data::host%]",
-          "password": "[%key:common::config_flow::data::password%]",
+          "api_key": "Clé API",
+          "host": "Hôte (IP)",
+          "password": "Mot de passe",
           "timeout": "Délai d'expiration (secondes)"
         },
         "description": "Entrez l'adresse IP de votre unité Daikin.\nSi votre appareil est configuré avec un mot de passe ou une clé API, veuillez les renseigner, sinon laissez les champs vides.",

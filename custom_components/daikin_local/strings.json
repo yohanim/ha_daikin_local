@@ -1,21 +1,22 @@
 {
   "config": {
     "abort": {
-      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
-      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]"
+      "already_configured": "Device is already configured",
+      "cannot_connect": "Failed to connect",
+      "reconfigure_successful": "Reconfiguration was successful"
     },
     "error": {
       "api_password": "Invalid authentication, use either API Key or Password.",
-      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
-      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
-      "unknown": "[%key:common::config_flow::error::unknown%]"
+      "cannot_connect": "Failed to connect",
+      "invalid_auth": "Invalid authentication",
+      "unknown": "Unexpected error"
     },
     "step": {
       "user": {
         "data": {
-          "api_key": "[%key:common::config_flow::data::api_key%]",
-          "host": "[%key:common::config_flow::data::host%]",
-          "password": "[%key:common::config_flow::data::password%]",
+          "api_key": "API Key",
+          "host": "Host",
+          "password": "Password",
           "timeout": "Request timeout (seconds)"
         },
         "description": "Enter the IP address of your Daikin AC.\nIf your device is set up with a password or API-key, please use that, in all other cases leave the fields blank.",

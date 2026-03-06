@@ -117,7 +117,6 @@ class FlowHandler(
         entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
         self.host = entry.data[CONF_HOST]
         self.entry_data = dict(entry.data)
-        # Set unique id to ensure we update the correct entry
         await self.async_set_unique_id(entry.unique_id)
         return await self.async_step_cloud_confirm()
 
@@ -180,6 +179,15 @@ class FlowHandler(
 
         return await self.async_step_cloud_confirm()
 
+    async def _finish_entry(self) -> ConfigFlowResult:
+        """Create or update the entry."""
+        if self.source == "reconfigure":
+            entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+            return self.async_update_reload_and_abort(
+                entry, data=self.entry_data, reason="reconfigure_successful"
+            )
+        return self.async_create_entry(title=self.host, data=self.entry_data)
+
     async def async_step_cloud_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -187,7 +195,7 @@ class FlowHandler(
         if user_input is not None:
             if user_input.get("enable_cloud"):
                 return await self.async_step_pick_implementation()
-            return self.async_create_entry(title=self.host, data=self.entry_data)
+            return await self._finish_entry()
 
         return self.async_show_form(
             step_id="cloud_confirm",
@@ -200,20 +208,17 @@ class FlowHandler(
 
     async def async_oauth2_user_plugin(self, result: dict[str, Any]) -> ConfigFlowResult:
         """Handle the result of the OAuth2 flow."""
-        # Here we should fetch the device ID from the cloud
-        # For simplicity in this hybrid approach, we will ask the user to provide it or try to discover it
         return await self.async_step_cloud_device()
 
     async def async_step_cloud_device(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Ask for the Cloud Device ID or try to find it."""
+        """Ask for the Cloud Device ID."""
         errors = {}
         if user_input is not None:
             self.entry_data[CONF_CLOUD_DEVICE_ID] = user_input[CONF_CLOUD_DEVICE_ID]
-            return self.async_create_entry(title=self.host, data=self.entry_data)
+            return await self._finish_entry()
 
-        # In a real implementation, we would list devices from the cloud and match by MAC
         return self.async_show_form(
             step_id="cloud_device",
             data_schema=vol.Schema(
