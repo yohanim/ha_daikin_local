@@ -73,7 +73,7 @@ class FlowHandler(
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlowHandler:
         """Get the options flow for this handler."""
-        return OptionsFlowHandler(config_entry)
+        return OptionsFlowHandler()
 
     @property
     def schema(self) -> vol.Schema:
@@ -113,7 +113,7 @@ class FlowHandler(
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Handle reconfiguration of the integration (e.g. to add Cloud)."""
+        """Handle reconfiguration of the integration."""
         entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
         self.host = entry.data[CONF_HOST]
         self.entry_data = dict(entry.data)
@@ -191,7 +191,7 @@ class FlowHandler(
     async def async_step_cloud_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Confirm if user wants to enable Cloud features (Onecta)."""
+        """Confirm if user wants to enable Cloud features."""
         if user_input is not None:
             if user_input.get("enable_cloud"):
                 return await self.async_step_pick_implementation()
@@ -214,7 +214,6 @@ class FlowHandler(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Ask for the Cloud Device ID."""
-        errors = {}
         if user_input is not None:
             self.entry_data[CONF_CLOUD_DEVICE_ID] = user_input[CONF_CLOUD_DEVICE_ID]
             return await self._finish_entry()
@@ -226,7 +225,6 @@ class FlowHandler(
                     vol.Required(CONF_CLOUD_DEVICE_ID): str,
                 }
             ),
-            errors=errors,
         )
 
     async def async_step_zeroconf(
@@ -248,10 +246,6 @@ class FlowHandler(
 class OptionsFlowHandler(OptionsFlow):
     """Handle options flow."""
 
-    def __init__(self, config_entry: ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
-
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -259,7 +253,8 @@ class OptionsFlowHandler(OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        schema = {
+        # Build schema using self.config_entry (available in OptionsFlow)
+        schema_dict = {
             vol.Optional(
                 CONF_TIMEOUT,
                 default=self.config_entry.options.get(
@@ -269,36 +264,34 @@ class OptionsFlowHandler(OptionsFlow):
             ): int,
         }
 
-        # Add cloud-specific options if cloud is configured
+        # Add cloud options if cloud is configured
         if self.config_entry.data.get(CONF_CLOUD_DEVICE_ID):
-            schema.update({
-                vol.Optional(
-                    CONF_CLOUD_SCAN_INTERVAL_DAY,
-                    default=self.config_entry.options.get(
-                        CONF_CLOUD_SCAN_INTERVAL_DAY, DEFAULT_CLOUD_SCAN_INTERVAL_DAY
-                    ),
-                ): int,
-                vol.Optional(
-                    CONF_CLOUD_SCAN_INTERVAL_NIGHT,
-                    default=self.config_entry.options.get(
-                        CONF_CLOUD_SCAN_INTERVAL_NIGHT, DEFAULT_CLOUD_SCAN_INTERVAL_NIGHT
-                    ),
-                ): int,
-                vol.Optional(
-                    CONF_CLOUD_DAY_START,
-                    default=self.config_entry.options.get(
-                        CONF_CLOUD_DAY_START, DEFAULT_CLOUD_DAY_START
-                    ),
-                ): str,
-                vol.Optional(
-                    CONF_CLOUD_DAY_END,
-                    default=self.config_entry.options.get(
-                        CONF_CLOUD_DAY_END, DEFAULT_CLOUD_DAY_END
-                    ),
-                ): str,
-            })
+            schema_dict[vol.Optional(
+                CONF_CLOUD_SCAN_INTERVAL_DAY,
+                default=self.config_entry.options.get(
+                    CONF_CLOUD_SCAN_INTERVAL_DAY, DEFAULT_CLOUD_SCAN_INTERVAL_DAY
+                ),
+            )] = int
+            schema_dict[vol.Optional(
+                CONF_CLOUD_SCAN_INTERVAL_NIGHT,
+                default=self.config_entry.options.get(
+                    CONF_CLOUD_SCAN_INTERVAL_NIGHT, DEFAULT_CLOUD_SCAN_INTERVAL_NIGHT
+                ),
+            )] = int
+            schema_dict[vol.Optional(
+                CONF_CLOUD_DAY_START,
+                default=self.config_entry.options.get(
+                    CONF_CLOUD_DAY_START, DEFAULT_CLOUD_DAY_START
+                ),
+            )] = str
+            schema_dict[vol.Optional(
+                CONF_CLOUD_DAY_END,
+                default=self.config_entry.options.get(
+                    CONF_CLOUD_DAY_END, DEFAULT_CLOUD_DAY_END
+                ),
+            )] = str
 
         return self.async_show_form(
             step_id="init",
-            data_schema=vol.Schema(schema),
+            data_schema=vol.Schema(schema_dict),
         )
