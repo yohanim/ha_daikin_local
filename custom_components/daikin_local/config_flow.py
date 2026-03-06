@@ -16,7 +16,6 @@ import voluptuous as vol
 
 from homeassistant.config_entries import (
     ConfigEntry,
-    ConfigFlow,
     ConfigFlowResult,
     OptionsFlow,
     callback,
@@ -28,23 +27,47 @@ from homeassistant.const import (
     CONF_TIMEOUT,
     CONF_UUID,
 )
+from homeassistant.helpers import config_entry_oauth2_helper
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from homeassistant.util.ssl import client_context_no_verify
 
-from .const import DOMAIN, KEY_MAC, TIMEOUT_SEC
+from .const import (
+    DOMAIN,
+    KEY_MAC,
+    TIMEOUT_SEC,
+    CONF_CLOUD_DEVICE_ID,
+    CONF_CLOUD_SCAN_INTERVAL_DAY,
+    CONF_CLOUD_SCAN_INTERVAL_NIGHT,
+    CONF_CLOUD_DAY_START,
+    CONF_CLOUD_DAY_END,
+    DEFAULT_CLOUD_SCAN_INTERVAL_DAY,
+    DEFAULT_CLOUD_SCAN_INTERVAL_NIGHT,
+    DEFAULT_CLOUD_DAY_START,
+    DEFAULT_CLOUD_DAY_END
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class FlowHandler(ConfigFlow, domain=DOMAIN):
+class FlowHandler(
+    config_entry_oauth2_helper.AbstractOAuth2FlowHandler, domain=DOMAIN
+):
     """Handle a config flow."""
 
+    DOMAIN = DOMAIN
     VERSION = 1
 
     def __init__(self) -> None:
         """Initialize the Daikin config flow."""
+        super().__init__()
         self.host: str | None = None
+        self.entry_data: dict[str, Any] = {}
+
+    @property
+    def logger(self) -> logging.Logger:
+        """Return logger."""
+        return _LOGGER
 
     @staticmethod
     @callback
@@ -64,30 +87,27 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
             }
         )
 
-    async def _create_entry(
-        self,
-        host: str,
-        mac: str,
-        key: str | None = None,
-        uuid: str | None = None,
-        password: str | None = None,
-        timeout: int = TIMEOUT_SEC,
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Register new entry."""
-        if not self.unique_id:
-            await self.async_set_unique_id(mac)
-        self._abort_if_unique_id_configured()
+        """User initiated config flow."""
+        if user_input is None:
+            return self.async_show_form(step_id="user", data_schema=self.schema)
+        
+        if user_input.get(CONF_API_KEY) and user_input.get(CONF_PASSWORD):
+            self.host = user_input[CONF_HOST]
+            return self.async_show_form(
+                step_id="user",
+                data_schema=self.schema,
+                errors={"base": "api_password"},
+            )
 
-        return self.async_create_entry(
-            title=host,
-            data={
-                CONF_HOST: host,
-                KEY_MAC: mac,
-                CONF_API_KEY: key,
-                CONF_UUID: uuid,
-                CONF_PASSWORD: password,
-                CONF_TIMEOUT: timeout,
-            },
+        self.host = user_input[CONF_HOST]
+        return await self._create_device(
+            user_input[CONF_HOST],
+            user_input.get(CONF_API_KEY),
+            user_input.get(CONF_PASSWORD),
+            user_input.get(CONF_TIMEOUT, TIMEOUT_SEC),
         )
 
     async def _create_device(
@@ -98,15 +118,11 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
         timeout: int = TIMEOUT_SEC,
     ) -> ConfigFlowResult:
         """Create device."""
-        # BRP07Cxx devices needs uuid together with key
         if key:
             uuid = str(uuid4())
         else:
             uuid = None
             key = None
-
-        if not password:
-            password = None
 
         try:
             async with asyncio.timeout(timeout):
@@ -119,7 +135,6 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
                     ssl_context=client_context_no_verify(),
                 )
         except (TimeoutError, ClientError):
-            self.host = None
             return self.async_show_form(
                 step_id="user",
                 data_schema=self.schema,
@@ -131,13 +146,6 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
                 data_schema=self.schema,
                 errors={"base": "invalid_auth"},
             )
-        except DaikinException as daikin_exp:
-            _LOGGER.error(daikin_exp)
-            return self.async_show_form(
-                step_id="user",
-                data_schema=self.schema,
-                errors={"base": "unknown"},
-            )
         except Exception:
             _LOGGER.exception("Unexpected error creating device")
             return self.async_show_form(
@@ -147,45 +155,76 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
             )
 
         mac = device.mac
-        return await self._create_entry(host, mac, key, uuid, password, timeout)
+        await self.async_set_unique_id(mac)
+        self._abort_if_unique_id_configured()
 
-    async def async_step_user(
+        self.entry_data = {
+            CONF_HOST: host,
+            KEY_MAC: mac,
+            CONF_API_KEY: key,
+            CONF_UUID: uuid,
+            CONF_PASSWORD: password,
+            CONF_TIMEOUT: timeout,
+        }
+
+        return await self.async_step_cloud_confirm()
+
+    async def async_step_cloud_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """User initiated config flow."""
-        if user_input is None:
-            return self.async_show_form(step_id="user", data_schema=self.schema)
-        if user_input.get(CONF_API_KEY) and user_input.get(CONF_PASSWORD):
-            self.host = user_input[CONF_HOST]
-            return self.async_show_form(
-                step_id="user",
-                data_schema=self.schema,
-                errors={"base": "api_password"},
-            )
-        return await self._create_device(
-            user_input[CONF_HOST],
-            user_input.get(CONF_API_KEY),
-            user_input.get(CONF_PASSWORD),
-            user_input.get(CONF_TIMEOUT, TIMEOUT_SEC),
+        """Confirm if user wants to enable Cloud features (Onecta)."""
+        if user_input is not None:
+            if user_input.get("enable_cloud"):
+                return await self.async_step_pick_implementation()
+            return self.async_create_entry(title=self.host, data=self.entry_data)
+
+        return self.async_show_form(
+            step_id="cloud_confirm",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional("enable_cloud", default=False): bool,
+                }
+            ),
+        )
+
+    async def async_oauth2_user_plugin(self, result: dict[str, Any]) -> ConfigFlowResult:
+        """Handle the result of the OAuth2 flow."""
+        # Here we should fetch the device ID from the cloud
+        # For simplicity in this hybrid approach, we will ask the user to provide it or try to discover it
+        return await self.async_step_cloud_device()
+
+    async def async_step_cloud_device(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Ask for the Cloud Device ID or try to find it."""
+        errors = {}
+        if user_input is not None:
+            self.entry_data[CONF_CLOUD_DEVICE_ID] = user_input[CONF_CLOUD_DEVICE_ID]
+            return self.async_create_entry(title=self.host, data=self.entry_data)
+
+        # In a real implementation, we would list devices from the cloud and match by MAC
+        return self.async_show_form(
+            step_id="cloud_device",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_CLOUD_DEVICE_ID): str,
+                }
+            ),
+            errors=errors,
         )
 
     async def async_step_zeroconf(
         self, discovery_info: ZeroconfServiceInfo
     ) -> ConfigFlowResult:
         """Prepare configuration for a discovered Daikin device."""
-        _LOGGER.debug("Zeroconf user_input: %s", discovery_info)
         devices = Discovery().poll(ip=discovery_info.host)
         if not devices:
-            _LOGGER.debug(
-                (
-                    "Could not find MAC-address for %s, make sure the required UDP"
-                    " ports are open (see integration documentation)"
-                ),
-                discovery_info.host,
-            )
             return self.async_abort(reason="cannot_connect")
-        await self.async_set_unique_id(next(iter(devices))[KEY_MAC])
+        
+        mac = next(iter(devices))[KEY_MAC]
+        await self.async_set_unique_id(mac)
         self._abort_if_unique_id_configured()
+        
         self.host = discovery_info.host
         return await self.async_step_user()
 
@@ -204,17 +243,46 @@ class OptionsFlowHandler(OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
+        schema = {
+            vol.Optional(
+                CONF_TIMEOUT,
+                default=self.config_entry.options.get(
+                    CONF_TIMEOUT,
+                    self.config_entry.data.get(CONF_TIMEOUT, TIMEOUT_SEC),
+                ),
+            ): int,
+        }
+
+        # Add cloud-specific options if cloud is configured
+        if self.config_entry.data.get(CONF_CLOUD_DEVICE_ID):
+            schema.update({
+                vol.Optional(
+                    CONF_CLOUD_SCAN_INTERVAL_DAY,
+                    default=self.config_entry.options.get(
+                        CONF_CLOUD_SCAN_INTERVAL_DAY, DEFAULT_CLOUD_SCAN_INTERVAL_DAY
+                    ),
+                ): int,
+                vol.Optional(
+                    CONF_CLOUD_SCAN_INTERVAL_NIGHT,
+                    default=self.config_entry.options.get(
+                        CONF_CLOUD_SCAN_INTERVAL_NIGHT, DEFAULT_CLOUD_SCAN_INTERVAL_NIGHT
+                    ),
+                ): int,
+                vol.Optional(
+                    CONF_CLOUD_DAY_START,
+                    default=self.config_entry.options.get(
+                        CONF_CLOUD_DAY_START, DEFAULT_CLOUD_DAY_START
+                    ),
+                ): str,
+                vol.Optional(
+                    CONF_CLOUD_DAY_END,
+                    default=self.config_entry.options.get(
+                        CONF_CLOUD_DAY_END, DEFAULT_CLOUD_DAY_END
+                    ),
+                ): str,
+            })
+
         return self.async_show_form(
             step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional(
-                        CONF_TIMEOUT,
-                        default=self.config_entry.options.get(
-                            CONF_TIMEOUT,
-                            self.config_entry.data.get(CONF_TIMEOUT, TIMEOUT_SEC),
-                        ),
-                    ): int,
-                }
-            ),
+            data_schema=vol.Schema(schema),
         )

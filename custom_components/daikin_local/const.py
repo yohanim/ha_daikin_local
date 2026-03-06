@@ -25,7 +25,26 @@ KEY_MAC = "mac"
 KEY_IP = "ip"
 
 CONF_TIMEOUT = "timeout"
+CONF_CLIENT_ID = "client_id"
+CONF_CLIENT_SECRET = "client_secret"
+CONF_CLOUD_DEVICE_ID = "cloud_device_id"
+
+CONF_CLOUD_SCAN_INTERVAL_DAY = "cloud_scan_interval_day"
+CONF_CLOUD_SCAN_INTERVAL_NIGHT = "cloud_scan_interval_night"
+CONF_CLOUD_DAY_START = "cloud_day_start"
+CONF_CLOUD_DAY_END = "cloud_day_end"
+
+DEFAULT_CLOUD_SCAN_INTERVAL_DAY = 10  # minutes
+DEFAULT_CLOUD_SCAN_INTERVAL_NIGHT = 60  # minutes
+DEFAULT_CLOUD_DAY_START = "07:00"
+DEFAULT_CLOUD_DAY_END = "23:00"
 
 ZONE_NAME_UNCONFIGURED = "-"
 
 TIMEOUT_SEC = 30
+
+# Cloud API
+DAIKIN_ONECTA_API_URL = "https://api.onecta.daikineurope.com/v1"
+DAIKIN_ONECTA_AUTH_URL = "https://api.onecta.daikineurope.com/v1/oidc/authorize"
+DAIKIN_ONECTA_TOKEN_URL = "https://api.onecta.daikineurope.com/v1/oidc/token"
+SWING_WINDNICE = "windnice"

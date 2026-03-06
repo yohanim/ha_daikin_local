@@ -24,13 +24,21 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.util.ssl import client_context_no_verify
 
-from .const import KEY_MAC, TIMEOUT_SEC
+from .const import KEY_MAC, TIMEOUT_SEC, CONF_CLOUD_DEVICE_ID
 from .coordinator import DaikinConfigEntry, DaikinCoordinator
+from .cloud_api import DaikinCloudAPI
+from . import oauth2
 
 _LOGGER = logging.getLogger(__name__)
 
 
 PLATFORMS = [Platform.CLIMATE, Platform.SENSOR, Platform.SWITCH]
+
+
+async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
+    """Set up the Daikin Local component."""
+    await oauth2.async_register_implementation(hass)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bool:
@@ -61,7 +69,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bo
         _LOGGER.debug("ClientConnectionError to %s", host)
         raise ConfigEntryNotReady from err
 
-    coordinator = DaikinCoordinator(hass, entry, device)
+    cloud_api = None
+    if CONF_CLOUD_DEVICE_ID in conf:
+        implementation = await config_entry_oauth2_helper.async_get_config_entry_implementation(
+            hass, entry
+        )
+        oauth_session = config_entry_oauth2_helper.OAuth2Session(hass, entry, implementation)
+        cloud_api = DaikinCloudAPI(hass, oauth_session, conf[CONF_CLOUD_DEVICE_ID])
+        _LOGGER.debug("Cloud API initialized for device %s", conf[CONF_CLOUD_DEVICE_ID])
+
+    coordinator = DaikinCoordinator(hass, entry, device, cloud_api)
 
     await coordinator.async_config_entry_first_refresh()
 

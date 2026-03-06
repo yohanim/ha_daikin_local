@@ -21,9 +21,27 @@
         "description": "Enter the IP address of your Daikin AC.\nIf your device is set up with a password or API-key, please use that, in all other cases leave the fields blank.",
         "title": "Configure Daikin AC"
       },
+      "cloud_confirm": {
+        "data": {
+          "enable_cloud": "Enable Cloud features (Onecta) for windNice mode"
+        },
+        "description": "Do you want to enable Cloud features to support 'windNice' (Comfort Airflow)? You will need Daikin Developer credentials.",
+        "title": "Enable Cloud Features"
+      },
+      "cloud_device": {
+        "data": {
+          "cloud_device_id": "Daikin Cloud Device ID (UUID)"
+        },
+        "description": "Please enter the UUID of your device as registered in Daikin Onecta Cloud.",
+        "title": "Cloud Device Configuration"
+      },
       "init": {
         "data": {
-          "timeout": "Request timeout (seconds)"
+          "timeout": "Request timeout (seconds)",
+          "cloud_scan_interval_day": "Cloud polling interval - Day (minutes)",
+          "cloud_scan_interval_night": "Cloud polling interval - Night (minutes)",
+          "cloud_day_start": "Day period start (HH:MM)",
+          "cloud_day_end": "Day period end (HH:MM)"
         },
         "title": "Configure Daikin AC options"
       }

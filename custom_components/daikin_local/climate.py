@@ -199,6 +199,9 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
         self._attr_unique_id = self.device.mac
         self._attr_fan_modes = [m.lower() for m in self.device.fan_rate]
         self._attr_swing_modes = [m.lower() for m in self.device.swing_modes]
+        if self.coordinator.cloud_api:
+            self._attr_swing_modes.append(SWING_WINDNICE)
+            
         self._list: dict[str, list[Any]] = {
             ATTR_HVAC_MODE: self._attr_hvac_modes,
             ATTR_FAN_MODE: self._attr_fan_modes,
@@ -217,7 +220,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
         if self.device.support_fan_rate:
             self._attr_supported_features |= ClimateEntityFeature.FAN_MODE
 
-        if self.device.support_swing_mode:
+        if self.device.support_swing_mode or self.coordinator.cloud_api:
             self._attr_supported_features |= ClimateEntityFeature.SWING_MODE
 
     async def _set(self, settings: dict[str, Any]) -> None:
@@ -227,6 +230,18 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
         for attr in (ATTR_TEMPERATURE, ATTR_FAN_MODE, ATTR_SWING_MODE, ATTR_HVAC_MODE):
             if (value := settings.get(attr)) is None:
                 continue
+
+            if attr == ATTR_SWING_MODE:
+                if value == SWING_WINDNICE and self.coordinator.cloud_api:
+                    # Activate windNice on Cloud
+                    await self.coordinator.cloud_api.async_set_wind_nice(True)
+                    # For local API, we might want to stop swing to avoid conflict
+                    # but typically windNice overrides it on the unit itself
+                    continue
+                elif self.coordinator.cloud_api and self.coordinator.wind_nice_active:
+                    # Deactivate windNice if another swing mode is chosen
+                    await self.coordinator.cloud_api.async_set_wind_nice(False)
+                    # Then continue with local swing setting
 
             if (daikin_attr := HA_ATTR_TO_DAIKIN.get(attr)) is not None:
                 if attr == ATTR_HVAC_MODE:
@@ -309,6 +324,9 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
     @property
     def swing_mode(self) -> str | None:
         """Return the swing setting."""
+        if self.coordinator.cloud_api and self.coordinator.wind_nice_active:
+            return SWING_WINDNICE
+            
         val = self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_SWING_MODE])[1]
         if val is not None:
             val = val.lower()

@@ -21,9 +21,27 @@
         "description": "Entrez l'adresse IP de votre unité Daikin.\nSi votre appareil est configuré avec un mot de passe ou une clé API, veuillez les renseigner, sinon laissez les champs vides.",
         "title": "Configurer Daikin"
       },
+      "cloud_confirm": {
+        "data": {
+          "enable_cloud": "Activer les fonctions Cloud (Onecta) pour le mode Flux confort"
+        },
+        "description": "Voulez-vous activer les fonctions Cloud pour supporter le mode 'Flux confort' (WindNice) ? Vous aurez besoin de vos identifiants Daikin Developer.",
+        "title": "Activer les fonctions Cloud"
+      },
+      "cloud_device": {
+        "data": {
+          "cloud_device_id": "ID Cloud de l'appareil (UUID)"
+        },
+        "description": "Veuillez entrer l'UUID de votre appareil tel qu'enregistré dans le Cloud Daikin Onecta.",
+        "title": "Configuration Cloud de l'appareil"
+      },
       "init": {
         "data": {
-          "timeout": "Délai d'expiration (secondes)"
+          "timeout": "Délai d'expiration (secondes)",
+          "cloud_scan_interval_day": "Intervalle de polling Cloud - Jour (minutes)",
+          "cloud_scan_interval_night": "Intervalle de polling Cloud - Nuit (minutes)",
+          "cloud_day_start": "Début de la période de jour (HH:MM)",
+          "cloud_day_end": "Fin de la période de jour (HH:MM)"
         },
         "title": "Options Daikin"
       }

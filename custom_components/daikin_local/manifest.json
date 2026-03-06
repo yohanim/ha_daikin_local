@@ -8,6 +8,7 @@
   "integration_type": "device",
   "iot_class": "local_polling",
   "loggers": ["pydaikin"],
+  "dependencies": ["application_credentials"],
   "requirements": ["pydaikin==2.18.1"],
   "zeroconf": ["_dkapi._tcp.local."],
   "version": "0.0.1"
