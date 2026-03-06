@@ -73,7 +73,7 @@ class FlowHandler(
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlowHandler:
         """Get the options flow for this handler."""
-        return OptionsFlowHandler()
+        return OptionsFlowHandler(config_entry)
 
     @property
     def schema(self) -> vol.Schema:
@@ -118,7 +118,17 @@ class FlowHandler(
         self.host = entry.data[CONF_HOST]
         self.entry_data = dict(entry.data)
         await self.async_set_unique_id(entry.unique_id)
-        return await self.async_step_cloud_confirm()
+
+        if user_input is not None:
+            self.entry_data.update(user_input)
+            if CONF_CLOUD_DEVICE_ID in self.entry_data:
+                return await self.async_step_pick_implementation()
+            return await self.async_step_cloud_confirm()
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=self.schema,
+        )
 
     async def _create_device(
         self,
@@ -263,6 +273,10 @@ class FlowHandler(
 
 class OptionsFlowHandler(OptionsFlow):
     """Handle options flow."""
+
+    def __init__(self, config_entry: ConfigEntry) -> None:
+        """Initialize options flow."""
+        self.config_entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None

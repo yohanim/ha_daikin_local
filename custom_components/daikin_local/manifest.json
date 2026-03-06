@@ -11,5 +11,5 @@
   "dependencies": ["application_credentials"],
   "requirements": ["pydaikin==2.18.1"],
   "zeroconf": ["_dkapi._tcp.local."],
-  "version": "0.1.0-dev3"
+  "version": "0.1.0-dev4"
 }

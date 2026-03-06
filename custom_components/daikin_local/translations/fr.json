@@ -22,6 +22,16 @@
         "description": "Entrez l'adresse IP de votre unité Daikin.\nSi votre appareil est configuré avec un mot de passe ou une clé API, veuillez les renseigner, sinon laissez les champs vides.",
         "title": "Configurer Daikin"
       },
+      "reconfigure": {
+        "data": {
+          "api_key": "Clé API",
+          "host": "Hôte (IP)",
+          "password": "Mot de passe",
+          "timeout": "Délai d'expiration (secondes)"
+        },
+        "description": "Mettre à jour la configuration de votre unité Daikin.",
+        "title": "Reconfigurer Daikin"
+      },
       "cloud_confirm": {
         "data": {
           "enable_cloud": "Activer les fonctions Cloud (Onecta) pour le mode Flux confort"
