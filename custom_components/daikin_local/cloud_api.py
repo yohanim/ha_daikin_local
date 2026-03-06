@@ -7,7 +7,7 @@ from aiohttp import ClientSession
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.network import get_url
-import homeassistant.helpers.config_entry_oauth2_helper as config_entry_oauth2_helper
+from homeassistant.helpers import config_entry_oauth2_flow
 
 from .const import DAIKIN_ONECTA_API_URL
 
@@ -19,7 +19,7 @@ class DaikinCloudAPI:
     def __init__(
         self,
         hass: HomeAssistant,
-        session: config_entry_oauth2_helper.OAuth2Session,
+        session: config_entry_oauth2_flow.OAuth2Session,
         device_id: str,
     ) -> None:
         """Initialize the Cloud API."""

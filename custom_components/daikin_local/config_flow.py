@@ -27,7 +27,7 @@ from homeassistant.const import (
     CONF_TIMEOUT,
     CONF_UUID,
 )
-import homeassistant.helpers.config_entry_oauth2_helper as config_entry_oauth2_helper
+from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from homeassistant.util.ssl import client_context_no_verify
@@ -51,7 +51,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class FlowHandler(
-    config_entry_oauth2_helper.AbstractOAuth2FlowHandler, domain=DOMAIN
+    config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMAIN
 ):
     """Handle a config flow."""
 

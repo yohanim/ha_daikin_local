@@ -21,7 +21,7 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr, entity_registry as er
-import homeassistant.helpers.config_entry_oauth2_helper as config_entry_oauth2_helper
+from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.util.ssl import client_context_no_verify
@@ -73,10 +73,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bo
 
     cloud_api = None
     if CONF_CLOUD_DEVICE_ID in conf:
-        implementation = await config_entry_oauth2_helper.async_get_config_entry_implementation(
+        implementation = await config_entry_oauth2_flow.async_get_config_entry_implementation(
             hass, entry
         )
-        oauth_session = config_entry_oauth2_helper.OAuth2Session(hass, entry, implementation)
+        oauth_session = config_entry_oauth2_flow.OAuth2Session(hass, entry, implementation)
         cloud_api = DaikinCloudAPI(hass, oauth_session, conf[CONF_CLOUD_DEVICE_ID])
         _LOGGER.debug("Cloud API initialized for device %s", conf[CONF_CLOUD_DEVICE_ID])
 
