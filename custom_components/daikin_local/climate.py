@@ -36,7 +36,7 @@ from .const import (
     DOMAIN,
     ZONE_NAME_UNCONFIGURED,
 )
-from .coordinator import DaikinCoordinator
+from .coordinator import DaikinConfigEntry, DaikinCoordinator
 from .entity import DaikinEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -161,7 +161,7 @@ def _zone_temperature_from_list(values: list[str], zone_id: int) -> float | None
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: DaikinConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up Daikin climate based on config_entry."""

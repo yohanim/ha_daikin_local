@@ -35,7 +35,7 @@ from .const import (
     ATTR_TOTAL_ENERGY_TODAY,
     ATTR_TOTAL_POWER,
 )
-from .coordinator import DaikinCoordinator
+from .coordinator import DaikinConfigEntry, DaikinCoordinator
 from .entity import DaikinEntity
 
 
@@ -134,7 +134,7 @@ SENSOR_TYPES: tuple[DaikinSensorEntityDescription, ...] = (
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: DaikinConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up Daikin climate based on config_entry."""
