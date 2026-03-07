@@ -4,11 +4,11 @@
   "codeowners": ["@yoh_anim"],
   "config_flow": true,
   "documentation": "https://github.com/yohanim/ha_daikin_local",
-  "issue_tracker": "https://github.com/yohanim/ha_daikin_local/issues",
   "integration_type": "device",
   "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/yohanim/ha_daikin_local/issues",
   "loggers": ["pydaikin"],
   "requirements": ["pydaikin==2.18.1"],
-  "zeroconf": ["_dkapi._tcp.local."],
-  "version": "0.0.2"
+  "version": "0.0.2",
+  "zeroconf": ["_dkapi._tcp.local."]
 }

@@ -1,5 +1,6 @@
 {
   "name": "Daikin Local",
+  "iot_class": "local_polling",
   "homeassistant": "2026.2.0",
   "render_readme": true
 }
