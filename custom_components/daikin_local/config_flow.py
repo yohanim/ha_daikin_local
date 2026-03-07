@@ -46,8 +46,9 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
         """Initialize the Daikin config flow."""
         self.host: str | None = None
 
+    @staticmethod
     @callback
-    def async_get_options_flow(self, config_entry: ConfigEntry) -> OptionsFlowHandler:
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlowHandler:
         """Get the options flow for this handler."""
         return OptionsFlowHandler(config_entry)
 
@@ -194,7 +195,6 @@ class OptionsFlowHandler(OptionsFlow):
 
     def __init__(self, config_entry: ConfigEntry) -> None:
         """Initialize options flow."""
-        super().__init__()
         self.config_entry = config_entry
 
     async def async_step_init(
@@ -204,17 +204,16 @@ class OptionsFlowHandler(OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        timeout = self.config_entry.options.get(CONF_TIMEOUT)
-        if timeout is None:
-            timeout = self.config_entry.data.get(CONF_TIMEOUT, TIMEOUT_SEC)
-
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
                 {
                     vol.Optional(
                         CONF_TIMEOUT,
-                        default=timeout,
+                        default=self.config_entry.options.get(
+                            CONF_TIMEOUT,
+                            self.config_entry.data.get(CONF_TIMEOUT, TIMEOUT_SEC),
+                        ),
                     ): int,
                 }
             ),

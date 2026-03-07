@@ -20,11 +20,7 @@
         },
         "description": "Entrez l'adresse IP de votre unité Daikin.\nSi votre appareil est configuré avec un mot de passe ou une clé API, veuillez les renseigner, sinon laissez les champs vides.",
         "title": "Configurer Daikin"
-      }
-    }
-  },
-  "options": {
-    "step": {
+      },
       "init": {
         "data": {
           "timeout": "Délai d'expiration (secondes)"
