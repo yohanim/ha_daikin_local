@@ -62,12 +62,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bo
         raise ConfigEntryNotReady from err
 
     coordinator = DaikinCoordinator(hass, entry, device)
+    entry.runtime_data = coordinator
 
     await coordinator.async_config_entry_first_refresh()
 
     await async_migrate_unique_id(hass, entry, device)
 
-    entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
