@@ -248,7 +248,8 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
 
         if values:
             await self.device.set(values)
-            await self.coordinator.async_request_refresh()
+            self.async_write_ha_state()
+            await self.coordinator.async_refresh()
 
     @property
     def current_temperature(self) -> float | None:
@@ -362,7 +363,8 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
             await self.device.set_advanced_mode(
                 HA_PRESET_TO_DAIKIN[PRESET_ECO], ATTR_STATE_OFF
             )
-        await self.coordinator.async_request_refresh()
+        self.async_write_ha_state()
+        await self.coordinator.async_refresh()
 
     @property
     def preset_modes(self) -> list[str]:
@@ -377,12 +379,14 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
     async def async_turn_on(self) -> None:
         """Turn device on."""
         await self.device.set({"pow": "1"})
-        await self.coordinator.async_request_refresh()
+        self.async_write_ha_state()
+        await self.coordinator.async_refresh()
 
     async def async_turn_off(self) -> None:
         """Turn device off."""
         await self.device.set({"pow": "0"})
-        await self.coordinator.async_request_refresh()
+        self.async_write_ha_state()
+        await self.coordinator.async_refresh()
 
 
 class DaikinZoneClimate(DaikinEntity, ClimateEntity):
@@ -508,7 +512,8 @@ class DaikinZoneClimate(DaikinEntity, ClimateEntity):
         except (AttributeError, KeyError, NotImplementedError, TypeError) as err:
             raise _zone_error("zone_set_failed") from err
 
-        await self.coordinator.async_request_refresh()
+        self.async_write_ha_state()
+        await self.coordinator.async_refresh()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Disallow changing HVAC mode via zone climate."""
