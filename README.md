@@ -1,45 +1,45 @@
 # Daikin Local - Home Assistant Integration
 
-Une intégration personnalisée pour Home Assistant permettant de contrôler localement les climatiseurs Daikin via leur API locale. Cette solution privilégie la rapidité, la fiabilité et le respect de la vie privée en évitant le passage par le cloud.
+A custom integration for Home Assistant to locally control Daikin air conditioners via their local API. This solution focuses on speed, reliability, and privacy by avoiding any cloud dependency.
 
-## ✨ Caractéristiques
+## ✨ Features
 
-- **Contrôle Climatique complet** : Mode (Chaud, Froid, Sec, Auto, Ventilateur), température cible, vitesse du ventilateur et oscillation.
-- **Gestion des Zones** : Support complet des systèmes gainables avec gestion individuelle des zones (marche/arrêt et température si supporté).
-- **Capteurs en temps réel** : Températures intérieure/extérieure, humidité et consommation d'énergie (selon le modèle).
-- **Fonctions Avancées** : Support du mode Streamer, modes Puissant (Boost) et Éco.
-- **Réactivité Immédiate** : Mise à jour instantanée de l'état dans l'interface après chaque changement de paramètre (plus besoin d'attendre le cycle de rafraîchissement de 30s).
+- **Full Climate Control**: Mode (Heat, Cool, Dry, Auto, Fan Only), target temperature, fan speed, and swing modes.
+- **Zone Management**: Full support for ducted systems with individual zone control (On/Off and temperature if supported).
+- **Real-time Sensors**: Indoor/Outdoor temperatures, humidity, and energy consumption (model dependent).
+- **Advanced Functions**: Support for Streamer mode, Powerful (Boost), and Econo modes.
+- **Instant Feedback**: State updates immediately in the UI after any setting change (no more waiting for the 30s refresh cycle).
 
 ## 🚀 Installation
 
-### Via HACS (Recommandé)
+### Via HACS (Recommended)
 
-1. Ouvrez HACS dans Home Assistant.
-2. Cliquez sur les trois points en haut à droite et choisissez **Dépôts personnalisés**.
-3. Ajoutez l'URL de ce dépôt avec la catégorie **Intégration**.
-4. Recherchez "Daikin Local" et cliquez sur **Télécharger**.
-5. Redémarrez Home Assistant.
+1. Open HACS in Home Assistant.
+2. Click the three dots in the top right corner and choose **Custom repositories**.
+3. Add the URL of this repository with the category **Integration**.
+4. Search for "Daikin Local" and click **Download**.
+5. Restart Home Assistant.
 
-### Manuelle
+### Manual Installation
 
-1. Téléchargez le dossier `custom_components/daikin_local`.
-2. Copiez-le dans le répertoire `custom_components` de votre installation Home Assistant.
-3. Redémarrez Home Assistant.
+1. Download the `custom_components/daikin_local` folder.
+2. Copy it into the `custom_components` directory of your Home Assistant installation.
+3. Restart Home Assistant.
 
 ## ⚙️ Configuration
 
-1. Allez dans **Paramètres** > **Appareils et services**.
-2. Cliquez sur **Ajouter une intégration**.
-3. Recherchez **Daikin Local**.
-4. Entrez l'adresse IP de votre unité Daikin.
-   - *Note : Il est fortement recommandé de fixer l'IP de votre climatiseur via votre routeur.*
+1. Go to **Settings** > **Devices & Services**.
+2. Click **Add Integration**.
+3. Search for **Daikin Local**.
+4. Enter the IP address of your Daikin unit.
+   - *Note: It is highly recommended to set a static IP for your AC unit via your router.*
 
-## 🛠️ Développement & Support
+## 🛠️ Development & Support
 
-Cette intégration utilise la bibliothèque `pydaikin` pour communiquer avec les appareils. Elle est optimisée pour être entièrement asynchrone afin de ne jamais bloquer le processus principal de Home Assistant.
+This integration uses the `pydaikin` library to communicate with the devices. It is optimized to be fully asynchronous to ensure it never blocks the main Home Assistant process.
 
-### Pourquoi Daikin Local ?
-Contrairement à l'intégration officielle qui peut parfois être limitée ou dépendante du matériel, cette version a été conçue pour offrir une meilleure réactivité et un support étendu des fonctionnalités spécifiques comme les zones et les modes avancés.
+### Why Daikin Local?
+Unlike the official integration which can sometimes be limited or hardware-dependent, this version was designed to provide better responsiveness and extended support for specific features like zones and advanced modes.
 
 ---
-*Développé avec ❤️ pour la communauté Home Assistant.*
+*Developed with ❤️ for the Home Assistant community.*

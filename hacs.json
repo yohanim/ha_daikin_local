@@ -1,5 +1,6 @@
 {
-  "name": "Daikin local",
+  "name": "Daikin Local",
+  "description": "Contrôle local des climatiseurs Daikin (API locale)",
   "homeassistant": "2026.2.0",
   "render_readme": true
 }
