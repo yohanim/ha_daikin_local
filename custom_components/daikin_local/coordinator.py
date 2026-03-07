@@ -17,7 +17,7 @@ _LOGGER = logging.getLogger(__name__)
 type DaikinConfigEntry = ConfigEntry[DaikinCoordinator]
 
 
-class DaikinCoordinator(DataUpdateCoordinator[None]):
+class DaikinCoordinator(DataUpdateCoordinator[Appliance]):
     """Class to manage fetching Daikin data."""
 
     def __init__(
@@ -36,5 +36,7 @@ class DaikinCoordinator(DataUpdateCoordinator[None]):
         )
         self.device = device
 
-    async def _async_update_data(self) -> None:
+    async def _async_update_data(self) -> Appliance:
+        """Update data."""
         await self.device.update_status()
+        return self.device
