@@ -14,14 +14,12 @@ from .const import DOMAIN, TIMEOUT_SEC
 
 _LOGGER = logging.getLogger(__name__)
 
-type DaikinConfigEntry = ConfigEntry[DaikinCoordinator]
 
-
-class DaikinCoordinator(DataUpdateCoordinator[Appliance]):
+class DaikinCoordinator(DataUpdateCoordinator[None]):
     """Class to manage fetching Daikin data."""
 
     def __init__(
-        self, hass: HomeAssistant, entry: DaikinConfigEntry, device: Appliance
+        self, hass: HomeAssistant, entry: ConfigEntry, device: Appliance
     ) -> None:
         """Initialize global Daikin data updater."""
         timeout = entry.options.get(
@@ -36,7 +34,6 @@ class DaikinCoordinator(DataUpdateCoordinator[Appliance]):
         )
         self.device = device
 
-    async def _async_update_data(self) -> Appliance:
+    async def _async_update_data(self) -> None:
         """Update data."""
         await self.device.update_status()
-        return self.device

@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import ZONE_NAME_UNCONFIGURED
-from .coordinator import DaikinConfigEntry, DaikinCoordinator
+from .coordinator import DaikinCoordinator
 from .entity import DaikinEntity
 
 DAIKIN_ATTR_ADVANCED = "adv"
@@ -19,7 +19,7 @@ DAIKIN_ATTR_MODE = "mode"
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: DaikinConfigEntry,
+    entry: ConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up Daikin climate based on config_entry."""

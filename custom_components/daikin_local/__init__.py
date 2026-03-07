@@ -25,7 +25,7 @@ from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.util.ssl import client_context_no_verify
 
 from .const import KEY_MAC, TIMEOUT_SEC
-from .coordinator import DaikinConfigEntry, DaikinCoordinator
+from .coordinator import DaikinCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [Platform.CLIMATE, Platform.SENSOR, Platform.SWITCH]
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Establish connection with Daikin."""
     conf = entry.data
     # For backwards compat, set unique ID
@@ -72,13 +72,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bo
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
 async def async_migrate_unique_id(
-    hass: HomeAssistant, config_entry: DaikinConfigEntry, device: Appliance
+    hass: HomeAssistant, config_entry: ConfigEntry, device: Appliance
 ) -> None:
     """Migrate old entry."""
     dev_reg = dr.async_get(hass)
