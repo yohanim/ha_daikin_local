@@ -50,7 +50,7 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlowHandler:
         """Get the options flow for this handler."""
-        return OptionsFlowHandler(config_entry)
+        return OptionsFlowHandler()
 
     @property
     def schema(self) -> vol.Schema:
@@ -189,13 +189,15 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
         self.host = discovery_info.host
         return await self.async_step_user()
 
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle reconfiguration."""
+        return await self.async_step_user(user_input)
+
 
 class OptionsFlowHandler(OptionsFlow):
     """Handle options flow."""
-
-    def __init__(self, config_entry: ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -206,15 +208,13 @@ class OptionsFlowHandler(OptionsFlow):
 
         return self.async_show_form(
             step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional(
-                        CONF_TIMEOUT,
-                        default=self.config_entry.options.get(
-                            CONF_TIMEOUT,
-                            self.config_entry.data.get(CONF_TIMEOUT, TIMEOUT_SEC),
-                        ),
-                    ): int,
-                }
+            data_schema=self.add_suggested_values_to_schema(
+                vol.Schema(
+                    {
+                        vol.Optional(CONF_TIMEOUT, default=TIMEOUT_SEC): int,
+                    }
+                ),
+                self.config_entry.options,
             ),
         )
+

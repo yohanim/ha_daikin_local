@@ -109,7 +109,7 @@ class DaikinToggleSwitch(DaikinEntity, SwitchEntity):
     @property
     def is_on(self) -> bool:
         """Return the state of the sensor."""
-        return "off" not in self.device.represent(DAIKIN_ATTR_MODE)
+        return self.device.power
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the zone on."""

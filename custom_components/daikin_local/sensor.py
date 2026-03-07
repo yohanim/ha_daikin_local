@@ -138,27 +138,27 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up Daikin climate based on config_entry."""
-    daikin_api = entry.runtime_data
-    sensors = [ATTR_INSIDE_TEMPERATURE]
-    if daikin_api.device.support_outside_temperature:
-        sensors.append(ATTR_OUTSIDE_TEMPERATURE)
-    if daikin_api.device.support_energy_consumption:
-        sensors.append(ATTR_ENERGY_TODAY)
-        sensors.append(ATTR_COOL_ENERGY)
-        sensors.append(ATTR_HEAT_ENERGY)
-        sensors.append(ATTR_TOTAL_POWER)
-        sensors.append(ATTR_TOTAL_ENERGY_TODAY)
-    if daikin_api.device.support_humidity:
-        sensors.append(ATTR_HUMIDITY)
-        sensors.append(ATTR_TARGET_HUMIDITY)
-    if daikin_api.device.support_compressor_frequency:
-        sensors.append(ATTR_COMPRESSOR_FREQUENCY)
+    coordinator = entry.runtime_data
+    device = coordinator.device
+    
+    entities: list[DaikinSensor] = []
+    
+    for description in SENSOR_TYPES:
+        supported = False
+        if description.key == ATTR_INSIDE_TEMPERATURE:
+            supported = True
+        elif description.key == ATTR_OUTSIDE_TEMPERATURE:
+            supported = device.support_outside_temperature
+        elif description.key in (ATTR_ENERGY_TODAY, ATTR_COOL_ENERGY, ATTR_HEAT_ENERGY, ATTR_TOTAL_POWER, ATTR_TOTAL_ENERGY_TODAY):
+            supported = device.support_energy_consumption
+        elif description.key in (ATTR_HUMIDITY, ATTR_TARGET_HUMIDITY):
+            supported = device.support_humidity
+        elif description.key == ATTR_COMPRESSOR_FREQUENCY:
+            supported = device.support_compressor_frequency
+            
+        if supported:
+            entities.append(DaikinSensor(coordinator, description))
 
-    entities = [
-        DaikinSensor(daikin_api, description)
-        for description in SENSOR_TYPES
-        if description.key in sensors
-    ]
     async_add_entities(entities)
 
 
