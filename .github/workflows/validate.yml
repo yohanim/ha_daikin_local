@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Home Assistant Manifest validation
-        uses: home-assistant/actions/hass-action@master
+        uses: home-assistant/actions/hass-daemon@master
         with:
           command: check_config
           config_path: custom_components/daikin_local
