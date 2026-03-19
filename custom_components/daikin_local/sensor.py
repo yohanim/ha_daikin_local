@@ -5,8 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from pydaikin.daikin_base import Appliance
-
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
