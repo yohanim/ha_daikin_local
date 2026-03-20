@@ -188,15 +188,10 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         )
 
         async with self._history_sync_lock:
-            # Home Assistant uses "change" between day/hour boundaries.
-            # For correct "today" values we also need yesterday's final sum
-            # at the day boundary, so always import both when requested for
-            # today.
-            # General rule: to compute the first hour of day X, we also
-            # need the final sum of the previous day (X+1, relative to the
-            # Daikin "prev_1day_*" indexing).
-            days_to_sync = [days_ago, days_ago + 1]
-            days_to_sync = sorted(set(d for d in days_to_sync if d >= 0))
+            # Requested behavior:
+            # - days_ago=0 -> sync today only
+            # - days_ago=1 -> sync yesterday, then today
+            days_to_sync = [0] if days_ago == 0 else [0, 1]
 
             # Attempt to fetch historical data explicitly if pydaikin supports it
             if hasattr(self.device, "get_day_power_ex"):
@@ -331,10 +326,21 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         )
 
         async with self._history_sync_lock:
-            # Ensure we have the boundary required to compute the first hour
-            # correctly by also importing the previous day's final sum.
-            days_to_sync = [days_ago, days_ago + 1]
-            days_to_sync = sorted(set(d for d in days_to_sync if d >= 0))
+            # Keep behavior explicit and predictable:
+            # - days_ago=0 -> sync today only
+            # - days_ago=1 -> sync yesterday, then today
+            days_to_sync = [0] if days_ago == 0 else [0, 1]
+
+            # Ensure extended history values are populated before key lookup.
+            if hasattr(self.device, "get_day_power_ex"):
+                try:
+                    await self.device.get_day_power_ex()
+                except Exception as err:
+                    _LOGGER.warning(
+                        "Failed to fetch extended power data for %s: %s",
+                        self.name,
+                        err,
+                    )
 
             def _normalize_24(values: list[int]) -> list[int]:
                 values = values[:24]
@@ -380,6 +386,13 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                     )
 
                     if not is_totalish:
+                        # Still accept active day energy keys if they are
+                        # neither cool nor heat (some firmwares only expose
+                        # aggregate data under generic energy keys).
+                        if "energy" in key_l and any(
+                            marker in key_l for marker in day_markers
+                        ):
+                            fallback.append(key)
                         continue
 
                     has_day_marker = any(marker in key_l for marker in day_markers)
