@@ -43,6 +43,7 @@ class DaikinData:
 
     appliance: Appliance
     calculated_total_energy_today: float
+    today_energy: float
     today_cool_energy: float
     today_heat_energy: float
 
@@ -79,21 +80,22 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         try:
             async with asyncio.timeout(timeout):
                 await self.device.update_status()
-        except TimeoutError as err:
-            raise UpdateFailed(
-                f"Timeout communicating with Daikin {self.name}: {err}"
-            ) from err
+                # Fetch extended energy if possible during regular update
+                if hasattr(self.device, "get_day_power_ex"):
+                    await self.device.get_day_power_ex()
         except Exception as err:
             raise UpdateFailed(
                 f"Error communicating with Daikin {self.name}: {err}"
             ) from err
 
-        # Energy smoothing logic for TOTAL system energy
+        # Energy smoothing logic
         now = dt_util.utcnow()
         current_power = getattr(self.device, "current_total_power_consumption", 0) or 0
-        real_total_energy_today = (
-            getattr(self.device, "today_total_energy_consumption", 0) or 0
-        )
+        
+        # Calculate base energy from history arrays
+        today_energy = self._get_sum_from_daikin_key("curr_day_energy")
+        today_cool = self._get_sum_from_daikin_key("curr_day_cool")
+        today_heat = self._get_sum_from_daikin_key("curr_day_heat")
 
         if self._last_update_time is not None:
             delta_h = (now - self._last_update_time).total_seconds() / 3600
@@ -101,10 +103,10 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             energy_delta = avg_power * delta_h
             self._integrated_total_energy += energy_delta
 
-        # Detect reset (midnight) or new data block arrival for total energy
-        if real_total_energy_today != self._last_total_energy_today:
+        # Reset integration when history updates (new block arrival)
+        if today_energy != self._last_total_energy_today:
             self._integrated_total_energy = 0
-            self._last_total_energy_today = real_total_energy_today
+            self._last_total_energy_today = today_energy
 
         self._last_update_time = now
         self._last_power = current_power
@@ -117,14 +119,10 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             self.hass.async_create_task(self.async_sync_history())
             self._last_history_sync = now
 
-        # Calculate current cumulative cool/heat totals from arrays
-        today_cool = self._get_sum_from_daikin_key("curr_day_cool")
-        today_heat = self._get_sum_from_daikin_key("curr_day_heat")
-
         return DaikinData(
             appliance=self.device,
-            calculated_total_energy_today=real_total_energy_today
-            + self._integrated_total_energy,
+            calculated_total_energy_today=today_energy + self._integrated_total_energy,
+            today_energy=today_energy,
             today_cool_energy=today_cool,
             today_heat_energy=today_heat,
         )
@@ -223,9 +221,6 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 break
             
             delta = delta_int / 10.0  # Convert to kWh
-            if delta <= 0:
-                continue
-
             cumulative_sum += delta
             
             start_time = base_date + timedelta(hours=hour)
