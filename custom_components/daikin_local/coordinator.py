@@ -14,7 +14,14 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .const import ATTR_COOL_ENERGY, ATTR_ENERGY_TODAY, ATTR_HEAT_ENERGY, DOMAIN, TIMEOUT_SEC
+from .const import (
+    ATTR_COOL_ENERGY,
+    ATTR_ENERGY_TODAY,
+    ATTR_HEAT_ENERGY,
+    ATTR_TOTAL_ENERGY_TODAY,
+    DOMAIN,
+    TIMEOUT_SEC,
+)
 from .utils import calculate_energy_sum, parse_daikin_list
 
 try:
@@ -173,6 +180,12 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
     async def async_sync_history(self, days_ago: int = 0) -> None:
         """Sync energy history with Daikin historical data."""
         if async_import_statistics is None:
+            key = f"{DOMAIN}_recorder_stats_unavailable_logged"
+            if not self.hass.data.get(key):
+                _LOGGER.warning(
+                    "Recorder statistics injection unavailable; energy history sync is disabled"
+                )
+                self.hass.data[key] = True
             return
 
         _LOGGER.debug("Syncing energy history for %s (days_ago=%s)", self.name, days_ago)
@@ -244,6 +257,11 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
             for key, data in {
                 ATTR_ENERGY_TODAY: normal_list,
+                # When users configure the Energy dashboard with the smoothed
+                # "compressor energy" sensor, we still need to inject the
+                # historical counter values (based on Daikin totals) so the
+                # consolidated graphs can be corrected.
+                ATTR_TOTAL_ENERGY_TODAY: normal_list,
                 ATTR_COOL_ENERGY: cool_list,
                 ATTR_HEAT_ENERGY: heat_list,
             }.items():
