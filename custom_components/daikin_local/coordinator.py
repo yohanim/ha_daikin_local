@@ -413,6 +413,20 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 return preferred + fallback
 
             for target_days_ago in reversed(days_to_sync):
+                if target_days_ago == 0:
+                    cool_data = self.device.values.get("curr_day_cool", [])
+                    heat_data = self.device.values.get("curr_day_heat", [])
+                elif target_days_ago == 1:
+                    cool_data = self.device.values.get("prev_1day_cool", [])
+                    heat_data = self.device.values.get("prev_1day_heat", [])
+                else:
+                    cool_data = self.device.values.get(
+                        f"prev_{target_days_ago}day_cool", []
+                    )
+                    heat_data = self.device.values.get(
+                        f"prev_{target_days_ago}day_heat", []
+                    )
+
                 total_keys = _candidate_keys_for_day(target_days_ago)
 
                 selected_key: str | None = None
@@ -431,20 +445,49 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
                 total_list = parse_daikin_list(total_data)
                 if not total_list:
+                    # Fallback requested: if pydaikin does not expose an
+                    # aggregate total series for this day, rebuild it from
+                    # cool+heat hourly series.
+                    cool_list = parse_daikin_list(cool_data)
+                    heat_list = parse_daikin_list(heat_data)
+                    if cool_list or heat_list:
+                        cool_list = _normalize_24(cool_list)
+                        heat_list = _normalize_24(heat_list)
+                        total_list = [c + h for c, h in zip(cool_list, heat_list)]
+                        selected_key = "fallback:cool+heat"
+
+                if not total_list:
                     active_totalish_keys = sorted(
                         key
                         for key, raw in self.device.values.items()
                         if ("total" in key.lower() or "global" in key.lower())
                         and parse_daikin_list(raw)
                     )
+                    diagnostic_keys = []
+                    for key, raw in self.device.values.items():
+                        key_l = key.lower()
+                        if not (
+                            "total" in key_l
+                            or "global" in key_l
+                            or "energy" in key_l
+                            or "curr_day" in key_l
+                            or "prev_" in key_l
+                        ):
+                            continue
+                        parsed = parse_daikin_list(raw)
+                        diagnostic_keys.append(
+                            f"{key}<{type(raw).__name__}> parsed_len={len(parsed)}"
+                        )
+
                     _LOGGER.debug(
                         "No total history key available for %s (days_ago=%s); "
                         "skipping total history correction for this day. "
-                        "Candidates=%s active_totalish=%s",
+                        "Candidates=%s active_totalish=%s diagnostic=%s",
                         self.name,
                         target_days_ago,
                         total_keys,
                         active_totalish_keys,
+                        diagnostic_keys,
                     )
                     continue
 
