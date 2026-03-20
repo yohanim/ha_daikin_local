@@ -419,6 +419,6 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 len(statistics),
                 entity_id,
                 base_date.date(),
-                0.0,
+                last_sum,
             )
             async_import_statistics(self.hass, metadata, statistics)
