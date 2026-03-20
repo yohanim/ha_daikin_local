@@ -571,13 +571,16 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             # Query the last available absolute sum right before base_date.
             # This is needed so the injected `sum` stays monotone and
             # HA doesn't detect a "reset" on the day/hour boundary.
+            # Use an end timestamp strictly before `base_date` to avoid
+            # reusing a 00:00 sample from the same day on repeated syncs.
+            end_before_base = base_date - timedelta(microseconds=1)
             last_stats = await recorder.get_instance(
                 self.hass
             ).async_add_executor_job(
                 statistics_during_period,
                 self.hass,
                 base_date - timedelta(hours=48),
-                base_date,
+                end_before_base,
                 {entity_id},
                 "hour",
                 {"energy": UnitOfEnergy.KILO_WATT_HOUR},
