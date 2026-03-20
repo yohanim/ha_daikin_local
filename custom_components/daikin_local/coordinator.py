@@ -244,8 +244,9 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                     values += [0] * (24 - len(values))
                 return values
 
-            # Import each requested day.
-            for target_days_ago in days_to_sync:
+            # Import from older to newer days so that rebasing using the
+            # previously existing (or just-injected) `sum` boundary works.
+            for target_days_ago in reversed(days_to_sync):
                 # Get historical data arrays
                 if target_days_ago == 0:
                     normal_data = self.device.values.get("curr_day_energy", [])
