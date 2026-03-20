@@ -134,42 +134,12 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         today_cool = self._get_sum_from_daikin_key("curr_day_cool")
         today_heat = self._get_sum_from_daikin_key("curr_day_heat")
 
-        local_midnight = dt_util.start_of_local_day()
-
-        if self._last_update_time is not None:
-            # Smooth the "total compressor energy" counter between API updates.
-            delta_h = (now - self._last_update_time).total_seconds() / 3600
-            avg_power = (self._last_power + current_power) / 2
-            energy_delta = avg_power * delta_h
-            self._integrated_total_energy += energy_delta
-
-            # Daikin can "correct" its reported totals during the day.
-            # Keep the displayed counter continuous unless we are close to
-            # local midnight (where a real reset should happen).
-            if self._last_total_energy_today != real_total_energy_today:
-                old_calc = self._last_total_energy_today + self._integrated_total_energy
-                if (
-                    real_total_energy_today < self._last_total_energy_today
-                    and now >= local_midnight + timedelta(hours=6)
-                ):
-                    # Decrease far from midnight: treat it as a correction,
-                    # not a reset.
-                    self._integrated_total_energy = old_calc - real_total_energy_today
-                elif (
-                    real_total_energy_today < self._last_total_energy_today
-                    and now < local_midnight + timedelta(hours=6)
-                ):
-                    # Likely a real cycle reset at midnight.
-                    self._integrated_total_energy = 0.0
-                else:
-                    # Normal correction: shift the integration baseline.
-                    self._integrated_total_energy = old_calc - real_total_energy_today
-
-                self._last_total_energy_today = real_total_energy_today
-        else:
-            # First run: establish baseline.
-            self._last_total_energy_today = real_total_energy_today
-            self._integrated_total_energy = 0.0
+        # Option: exactness over smoothing.
+        # `total_energy_today` is derived from Daikin's own counter, so to
+        # keep consistent distribution vs. cool/heat sensors we don't
+        # integrate power between polls here.
+        self._integrated_total_energy = 0.0
+        self._last_total_energy_today = real_total_energy_today
 
         self._last_update_time = now
         self._last_power = current_power
@@ -187,7 +157,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
         return DaikinData(
             appliance=self.device,
-            calculated_total_energy_today=real_total_energy_today + self._integrated_total_energy,
+            calculated_total_energy_today=real_total_energy_today,
             today_energy=real_total_energy_today,
             today_cool_energy=today_cool,
             today_heat_energy=today_heat,
