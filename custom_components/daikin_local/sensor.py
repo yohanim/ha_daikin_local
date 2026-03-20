@@ -75,7 +75,13 @@ SENSOR_TYPES: tuple[DaikinSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.HUMIDITY,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=PERCENTAGE,
-        value_func=lambda data: data.appliance.humidity,
+        # pydaikin exposes the configured target humidity on some models.
+        # If not available, fall back to the current humidity.
+        value_func=lambda data: (
+            data.appliance.target_humidity
+            if getattr(data.appliance, "target_humidity", None) is not None
+            else data.appliance.humidity
+        ),
     ),
     DaikinSensorEntityDescription(
         key=ATTR_TOTAL_POWER,
