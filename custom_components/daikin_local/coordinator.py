@@ -348,6 +348,42 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                     values += [0] * (24 - len(values))
                 return values
 
+            def _aggregate_all_devices_cool_heat(
+                target_days_ago: int,
+            ) -> list[int] | None:
+                """Build a global total series by summing all devices cool+heat."""
+                aggregate = [0] * 24
+                found = False
+
+                for entry in self.hass.config_entries.async_entries(DOMAIN):
+                    runtime = getattr(entry, "runtime_data", None)
+                    if runtime is None or not hasattr(runtime, "device"):
+                        continue
+                    values = runtime.device.values
+                    if target_days_ago == 0:
+                        cool_raw = values.get("curr_day_cool", [])
+                        heat_raw = values.get("curr_day_heat", [])
+                    elif target_days_ago == 1:
+                        cool_raw = values.get("prev_1day_cool", [])
+                        heat_raw = values.get("prev_1day_heat", [])
+                    else:
+                        cool_raw = values.get(f"prev_{target_days_ago}day_cool", [])
+                        heat_raw = values.get(f"prev_{target_days_ago}day_heat", [])
+
+                    cool_list = parse_daikin_list(cool_raw)
+                    heat_list = parse_daikin_list(heat_raw)
+                    if not cool_list and not heat_list:
+                        continue
+
+                    cool_list = _normalize_24(cool_list)
+                    heat_list = _normalize_24(heat_list)
+                    aggregate = [
+                        agg + c + h for agg, c, h in zip(aggregate, cool_list, heat_list)
+                    ]
+                    found = True
+
+                return aggregate if found else None
+
             def _candidate_keys_for_day(target_days_ago: int) -> list[str]:
                 values = self.device.values
                 if target_days_ago == 0:
@@ -447,14 +483,11 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 if not total_list:
                     # Fallback requested: if pydaikin does not expose an
                     # aggregate total series for this day, rebuild it from
-                    # cool+heat hourly series.
-                    cool_list = parse_daikin_list(cool_data)
-                    heat_list = parse_daikin_list(heat_data)
-                    if cool_list or heat_list:
-                        cool_list = _normalize_24(cool_list)
-                        heat_list = _normalize_24(heat_list)
-                        total_list = [c + h for c, h in zip(cool_list, heat_list)]
-                        selected_key = "fallback:cool+heat"
+                    # ALL devices cool+heat hourly series.
+                    all_devices_total = _aggregate_all_devices_cool_heat(target_days_ago)
+                    if all_devices_total is not None:
+                        total_list = all_devices_total
+                        selected_key = "fallback:all_devices_cool+heat"
 
                 if not total_list:
                     active_totalish_keys = sorted(
