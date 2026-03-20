@@ -193,24 +193,22 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         self, entity_id: str, data: list[int], base_date: datetime
     ) -> None:
         """Import a list of hourly deltas into HA statistics."""
-        # Get last known statistic sum to avoid resets in the UI
-        # Search back 48h to be sure to find the last known sum before our window
+        # Get last known statistic sum exactly before our window
         last_stats = await async_get_statistics(
             self.hass,
             start_time=base_date - timedelta(hours=48),
+            end_time=base_date,
             statistic_ids=[entity_id],
             period="hour",
         )
 
         cumulative_sum = 0.0
         if entity_id in last_stats and last_stats[entity_id]:
-            # Use the sum of the last available record
+            # Use the sum of the last available record before our period
             cumulative_sum = last_stats[entity_id][-1].get("sum") or 0.0
+            _LOGGER.debug("Found previous sum for %s: %s", entity_id, cumulative_sum)
         else:
-            # If no history found, we might be starting from scratch
-            # However, if we are in the middle of a day, starting at 0 will look like a reset
-            # So we only start if cumulative_sum is really 0 and we have no other choice
-            _LOGGER.debug("No previous statistics found for %s within 48h", entity_id)
+            _LOGGER.debug("No previous statistics found for %s before %s", entity_id, base_date)
 
         metadata: StatisticMetaData = {
             "has_mean": False,
@@ -220,7 +218,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             "source": "recorder",
             "statistic_id": entity_id,
             "unit_of_measurement": UnitOfEnergy.KILO_WATT_HOUR,
-            "unit_class": "energy",
+            "device_class": "energy",
         }
 
         statistics = []
