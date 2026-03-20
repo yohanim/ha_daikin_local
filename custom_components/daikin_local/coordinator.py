@@ -449,20 +449,6 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 return preferred + fallback
 
             for target_days_ago in reversed(days_to_sync):
-                if target_days_ago == 0:
-                    cool_data = self.device.values.get("curr_day_cool", [])
-                    heat_data = self.device.values.get("curr_day_heat", [])
-                elif target_days_ago == 1:
-                    cool_data = self.device.values.get("prev_1day_cool", [])
-                    heat_data = self.device.values.get("prev_1day_heat", [])
-                else:
-                    cool_data = self.device.values.get(
-                        f"prev_{target_days_ago}day_cool", []
-                    )
-                    heat_data = self.device.values.get(
-                        f"prev_{target_days_ago}day_heat", []
-                    )
-
                 total_keys = _candidate_keys_for_day(target_days_ago)
 
                 selected_key: str | None = None
