@@ -1,0 +1,15 @@
+sync_history:
+  name: Sync energy history
+  description: Corrects energy statistics using historical data from the Daikin unit (Today and Yesterday).
+  fields:
+    days_ago:
+      name: Days ago
+      description: Number of days back to sync (0 for Today, 1 for Yesterday).
+      example: 0
+      default: 0
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 1
+          mode: box
