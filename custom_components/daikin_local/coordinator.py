@@ -167,22 +167,22 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             if not entity_id:
                 continue
 
-            await self._async_import_data_to_stats(entity_id, data, base_date)
+            self._import_data_to_stats(entity_id, data, base_date)
 
-    async def _async_import_data_to_stats(
+    def _import_data_to_stats(
         self, entity_id: str, data: list[int], base_date: datetime
     ) -> None:
         """Import a list of hourly deltas into HA statistics."""
-        metadata = StatisticMetaData(
-            has_mean=False,
-            mean_type=StatisticMeanType.NONE,
-            has_sum=True,
-            name=None,  # Will be taken from entity
-            source="recorder",
-            statistic_id=entity_id,
-            unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-            unit_class="energy",
-        )
+        metadata: StatisticMetaData = {
+            "has_mean": False,
+            "mean_type": StatisticMeanType.NONE,
+            "has_sum": True,
+            "name": None,
+            "source": "recorder",
+            "statistic_id": entity_id,
+            "unit_of_measurement": UnitOfEnergy.KILO_WATT_HOUR,
+            "unit_class": "energy",
+        }
 
         statistics = []
         cumulative_sum = 0.0
