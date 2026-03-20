@@ -21,7 +21,6 @@ try:
     from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
     from homeassistant.components.recorder.statistics import (
         async_import_statistics,
-        async_get_statistics,
     )
     from homeassistant.components.recorder.const import StatisticMeanType
 except ImportError:
@@ -119,7 +118,14 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             self._last_history_sync is None
             or now - self._last_history_sync > timedelta(hours=1)
         ):
-            self.hass.async_create_task(self.async_sync_history())
+            # Daikin can report consumption with a delay.
+            # Sync both today and (recently) yesterday to catch late data
+            # that crosses the midnight boundary.
+            self.hass.async_create_task(self.async_sync_history(days_ago=0))
+
+            local_midnight = dt_util.start_of_local_day()
+            if now < local_midnight + timedelta(hours=3):
+                self.hass.async_create_task(self.async_sync_history(days_ago=1))
             self._last_history_sync = now
 
         return DaikinData(
@@ -206,23 +212,16 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
     async def _import_data_to_stats(
         self, entity_id: str, data: list[int], base_date: datetime
     ) -> None:
-        """Import a list of hourly deltas into HA statistics."""
-        # Get last known statistic sum exactly before our window
-        last_stats = await async_get_statistics(
-            self.hass,
-            start_time=base_date - timedelta(hours=48),
-            end_time=base_date,
-            statistic_ids=[entity_id],
-            period="hour",
-        )
+        """Import a list of hourly energy values into HA statistics.
 
+        For HA energy/consumption aggregation (`state_class=total_increasing`),
+        each statistic entry must represent the counter value at the end of
+        the hour and include `last_reset` (we assume the counter resets at
+        local midnight for the "today" entities).
+        """
+        # The "today" energy sensors reset at local midnight, so we start the
+        # cumulative counter at 0 for this day.
         cumulative_sum = 0.0
-        if entity_id in last_stats and last_stats[entity_id]:
-            # Use the sum of the last available record before our period
-            cumulative_sum = last_stats[entity_id][-1].get("sum") or 0.0
-            _LOGGER.debug("Found previous sum for %s: %s", entity_id, cumulative_sum)
-        else:
-            _LOGGER.debug("No previous statistics found for %s before %s", entity_id, base_date)
 
         metadata: StatisticMetaData = {
             "has_mean": False,
@@ -254,8 +253,12 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             statistics.append(
                 StatisticData(
                     start=start_time_utc,
-                    state=delta,
+                    # `state` and `sum` represent the counter value at the end
+                    # of the hour (HA takes the "last" value during the period
+                    # when compiling hourly/daily rollups).
+                    state=cumulative_sum,
                     sum=cumulative_sum,
+                    last_reset=base_date,
                 )
             )
 
@@ -265,6 +268,6 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 len(statistics),
                 entity_id,
                 base_date.date(),
-                cumulative_sum - sum(s["state"] for s in statistics),
+                0.0,
             )
             async_import_statistics(self.hass, metadata, statistics)
