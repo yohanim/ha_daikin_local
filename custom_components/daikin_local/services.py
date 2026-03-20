@@ -1,0 +1,39 @@
+"""Services for Daikin integration."""
+from __future__ import annotations
+
+import voluptuous as vol
+
+from homeassistant.core import HomeAssistant, ServiceCall
+
+from .const import DOMAIN
+
+SERVICE_SYNC_HISTORY = "sync_history"
+ATTR_DAYS_AGO = "days_ago"
+
+SERVICE_SCHEMA = vol.Schema(
+    {
+        vol.Optional(ATTR_DAYS_AGO, default=0): vol.All(
+            vol.Coerce(int), vol.Range(min=0, max=1)
+        ),
+    }
+)
+
+async def async_setup_services(hass: HomeAssistant) -> None:
+    """Set up services for the Daikin integration."""
+
+    async def async_sync_history(call: ServiceCall) -> None:
+        """Sync history for all or specific Daikin devices."""
+        days_ago = call.data.get(ATTR_DAYS_AGO, 0)
+        
+        # In HA 2026.3, runtime_data is stored in entry.runtime_data
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            if hasattr(entry, "runtime_data") and entry.runtime_data:
+                coordinator = entry.runtime_data
+                await coordinator.async_sync_history(days_ago=days_ago)
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SYNC_HISTORY,
+        async_sync_history,
+        schema=SERVICE_SCHEMA,
+    )

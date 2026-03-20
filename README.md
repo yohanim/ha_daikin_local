@@ -6,7 +6,11 @@ A custom integration for Home Assistant to locally control Daikin air conditione
 
 - **Full Climate Control**: Mode (Heat, Cool, Dry, Auto, Fan Only), target temperature, fan speed, and swing modes.
 - **Zone Management**: Full support for ducted systems with individual zone control (On/Off and temperature if supported).
-- **Real-time Sensors**: Indoor/Outdoor temperatures, humidity, and energy consumption (model dependent).
+- **Energy Management**: 
+  - **Real-time Smoothing**: The total system energy (Compressor) is smoothed by integrating power between updates, removing 2-hour spikes.
+  - **Segmented Tracking**: Individual Heat and Cool energy sensors for each unit, with `total_increasing` support.
+  - **Auto-Sync History**: Automatic hourly synchronization with the Daikin unit's historical data (Today and Yesterday).
+  - **Manual Correction**: Use the `sync_history` action to manually force a synchronization of energy statistics.
 - **Advanced Functions**: Support for Streamer mode, Powerful (Boost), and Econo modes.
 - **Instant Feedback**: State updates immediately in the UI after any setting change (no more waiting for the 30s refresh cycle).
 
@@ -33,6 +37,20 @@ A custom integration for Home Assistant to locally control Daikin air conditione
 3. Search for **Daikin Local**.
 4. Enter the IP address of your Daikin unit.
    - *Note: It is highly recommended to set a static IP for your AC unit via your router.*
+
+## ⚡ Energy Management Details
+
+### Real-time Smoothing
+Daikin devices typically report energy consumption in delayed 2-hour blocks. This integration solves this by:
+1. Integrating the current power consumption (`current_total_power_consumption`) in real-time.
+2. Automatically re-syncing with the device's official totals every hour and at midnight.
+
+### History Synchronization
+To ensure perfect graphs in the Home Assistant Energy Dashboard, the integration automatically synchronizes with the Daikin unit's internal memory (`curr_day_energy`, `curr_day_cool`, etc.) every hour.
+
+You can also trigger this manually:
+- **Action**: `daikin_local.sync_history`
+- **Parameter**: `days_ago` (0 for Today, 1 for Yesterday)
 
 ## 🛠️ Development & Support
 

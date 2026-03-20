@@ -29,6 +29,18 @@
       }
     }
   },
+  "services": {
+    "sync_history": {
+      "name": "Synchroniser l'historique d'énergie",
+      "description": "Corrige les statistiques d'énergie à l'aide des données historiques de l'unité Daikin (Aujourd'hui et Hier).",
+      "fields": {
+        "days_ago": {
+          "name": "Jours passés",
+          "description": "Nombre de jours en arrière à synchroniser (0 pour Aujourd'hui, 1 pour Hier)."
+        }
+      }
+    }
+  },
   "entity": {
     "climate": {
       "daikin": {

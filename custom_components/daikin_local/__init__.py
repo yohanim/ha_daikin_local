@@ -24,8 +24,9 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.util.ssl import client_context_no_verify
 
-from .const import KEY_MAC, TIMEOUT_SEC
+from .const import KEY_MAC, TIMEOUT_SEC, DOMAIN
 from .coordinator import DaikinConfigEntry, DaikinCoordinator
+from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -69,6 +70,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bo
 
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # Register services once
+    if not hass.data.get(f"{DOMAIN}_services_registered"):
+        await async_setup_services(hass)
+        hass.data[f"{DOMAIN}_services_registered"] = True
 
     entry.async_on_unload(entry.add_update_listener(update_listener))
 

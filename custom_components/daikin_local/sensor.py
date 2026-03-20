@@ -94,7 +94,7 @@ SENSOR_TYPES: tuple[DaikinSensorEntityDescription, ...] = (
         state_class=SensorStateClass.TOTAL_INCREASING,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         entity_registry_enabled_default=False,
-        value_func=lambda data: round(data.calculated_cool_energy, 2),
+        value_func=lambda data: round(data.today_cool_energy, 2),
     ),
     DaikinSensorEntityDescription(
         key=ATTR_HEAT_ENERGY,
@@ -103,7 +103,7 @@ SENSOR_TYPES: tuple[DaikinSensorEntityDescription, ...] = (
         state_class=SensorStateClass.TOTAL_INCREASING,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         entity_registry_enabled_default=False,
-        value_func=lambda data: round(data.calculated_heat_energy, 2),
+        value_func=lambda data: round(data.today_heat_energy, 2),
     ),
     DaikinSensorEntityDescription(
         key=ATTR_ENERGY_TODAY,
@@ -111,7 +111,7 @@ SENSOR_TYPES: tuple[DaikinSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        value_func=lambda data: round(data.calculated_energy_today, 2),
+        value_func=lambda data: round(data.appliance.today_energy_consumption, 2),
     ),
     DaikinSensorEntityDescription(
         key=ATTR_COMPRESSOR_FREQUENCY,
