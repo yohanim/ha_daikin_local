@@ -47,7 +47,9 @@ def _ensure_recorder_statistics_api() -> bool:
         from homeassistant.components.recorder.statistics import (
             async_import_statistics as _async_import_statistics,
         )
-        from homeassistant.components.recorder.const import StatisticMeanType as _StatisticMeanType
+        # In recent Home Assistant versions, StatisticMeanType is defined in
+        # recorder models (not in recorder.const).
+        from homeassistant.components.recorder.models import StatisticMeanType as _StatisticMeanType
     except ImportError as err:
         _LOGGER.debug("Recorder statistics API import failed: %s", err)
         return False
