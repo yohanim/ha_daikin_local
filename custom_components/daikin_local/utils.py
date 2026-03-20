@@ -10,7 +10,10 @@ def parse_daikin_list(raw_data: str | list[int]) -> list[int]:
     """Parse Daikin historical data (can be slash-separated string or list)."""
     if isinstance(raw_data, str):
         try:
-            return [int(v) for v in raw_data.split("/") if v]
+            # Daikin uses "0/0/1/..." strings. We MUST keep zeros, otherwise
+            # the hourly indexes shift and Home Assistant energy charts become
+            # aggregated at the start of the day.
+            return [int(v) for v in raw_data.split("/") if v != ""]
         except ValueError:
             _LOGGER.debug("Failed to parse Daikin historical data: %s", raw_data)
             return []
