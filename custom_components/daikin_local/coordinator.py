@@ -301,9 +301,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                         continue
 
                     _LOGGER.debug("Found entity_id %s for %s", entity_id, key)
-                    self.hass.async_create_task(
-                        self._import_data_to_stats(entity_id, data, base_date)
-                    )
+                    await self._import_data_to_stats(entity_id, data, base_date)
 
     async def async_sync_total_history(self, days_ago: int = 0) -> None:
         """Sync *only* the smoothed total/compressor energy history.
@@ -321,7 +319,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 self.hass.data[key] = True
             return
 
-        _LOGGER.warning(
+        _LOGGER.info(
             "Syncing total energy history for %s (days_ago=%s) - use with care",
             self.name,
             days_ago,
@@ -391,9 +389,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                     )
                     continue
 
-                self.hass.async_create_task(
-                    self._import_data_to_stats(entity_id, total_list, base_date)
-                )
+                await self._import_data_to_stats(entity_id, total_list, base_date)
 
     async def _import_data_to_stats(
         self, entity_id: str, data: list[int], base_date: datetime
