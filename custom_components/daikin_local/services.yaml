@@ -13,3 +13,19 @@ sync_history:
           min: 0
           max: 1
           mode: box
+
+sync_total_history:
+  name: Sync total energy history
+  description: Corrects the smoothed total/compressor energy history from the Daikin unit (targeted fix, use rarely).
+  fields:
+    days_ago:
+      name: Days ago
+      description: Number of days back to sync (0 for Today, 1 for Yesterday).
+      example: 0
+      default: 0
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 1
+          mode: box

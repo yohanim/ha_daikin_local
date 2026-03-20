@@ -19,6 +19,7 @@ from .const import (
     ATTR_COOL_ENERGY,
     ATTR_ENERGY_TODAY,
     ATTR_HEAT_ENERGY,
+    ATTR_TOTAL_ENERGY_TODAY,
     DOMAIN,
     TIMEOUT_SEC,
 )
@@ -333,6 +334,96 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                     self.hass.async_create_task(
                         self._import_data_to_stats(entity_id, data, base_date)
                     )
+
+    async def async_sync_total_history(self, days_ago: int = 0) -> None:
+        """Sync *only* the smoothed total/compressor energy history.
+
+        This is meant as a targeted correction service for the total sensor.
+        It should be used rarely because it can influence Energy dashboard
+        calculations depending on which entities are configured.
+        """
+        if not _ensure_recorder_statistics_api():
+            key = f"{DOMAIN}_recorder_stats_unavailable_logged"
+            if not self.hass.data.get(key):
+                _LOGGER.warning(
+                    "Recorder statistics injection unavailable; total energy history sync is disabled"
+                )
+                self.hass.data[key] = True
+            return
+
+        _LOGGER.warning(
+            "Syncing total energy history for %s (days_ago=%s) - use with care",
+            self.name,
+            days_ago,
+        )
+
+        async with self._history_sync_lock:
+            # Ensure we have the boundary required to compute the first hour
+            # correctly by also importing the previous day's final sum.
+            days_to_sync = [days_ago, days_ago + 1]
+            days_to_sync = sorted(set(d for d in days_to_sync if d >= 0))
+
+            def _normalize_24(values: list[int]) -> list[int]:
+                values = values[:24]
+                if len(values) < 24:
+                    values += [0] * (24 - len(values))
+                return values
+
+            for target_days_ago in reversed(days_to_sync):
+                if target_days_ago == 0:
+                    total_data = self.device.values.get("curr_day_energy", [])
+                    cool_data = self.device.values.get("curr_day_cool", [])
+                    heat_data = self.device.values.get("curr_day_heat", [])
+                elif target_days_ago == 1:
+                    total_data = self.device.values.get("prev_1day_energy", [])
+                    cool_data = self.device.values.get("prev_1day_cool", [])
+                    heat_data = self.device.values.get("prev_1day_heat", [])
+                else:
+                    total_data = self.device.values.get(
+                        f"prev_{target_days_ago}day_energy", []
+                    )
+                    cool_data = self.device.values.get(
+                        f"prev_{target_days_ago}day_cool", []
+                    )
+                    heat_data = self.device.values.get(
+                        f"prev_{target_days_ago}day_heat", []
+                    )
+
+                base_date = dt_util.start_of_local_day() - timedelta(
+                    days=target_days_ago
+                )
+
+                total_list = parse_daikin_list(total_data)
+                cool_list = parse_daikin_list(cool_data)
+                heat_list = parse_daikin_list(heat_data)
+
+                # Fallback: if total isn't provided, reconstruct from cool/heat.
+                if not total_list and (cool_list or heat_list):
+                    cool_list = _normalize_24(cool_list)
+                    heat_list = _normalize_24(heat_list)
+                    total_list = [c + h for c, h in zip(cool_list, heat_list)]
+
+                if not total_list:
+                    continue
+
+                total_list = _normalize_24(total_list)
+
+                ent_reg = er.async_get(self.hass)
+                unique_id = f"{self.device.mac}-{ATTR_TOTAL_ENERGY_TODAY}"
+                entity_id = ent_reg.async_get_entity_id(
+                    "sensor", DOMAIN, unique_id
+                )
+                if not entity_id:
+                    _LOGGER.warning(
+                        "Total sensor entity not found for %s (unique_id: %s).",
+                        self.name,
+                        unique_id,
+                    )
+                    continue
+
+                self.hass.async_create_task(
+                    self._import_data_to_stats(entity_id, total_list, base_date)
+                )
 
     async def _import_data_to_stats(
         self, entity_id: str, data: list[int], base_date: datetime

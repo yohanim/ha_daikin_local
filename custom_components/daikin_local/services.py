@@ -8,6 +8,7 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from .const import DOMAIN
 
 SERVICE_SYNC_HISTORY = "sync_history"
+SERVICE_SYNC_TOTAL_HISTORY = "sync_total_history"
 ATTR_DAYS_AGO = "days_ago"
 
 SERVICE_SCHEMA = vol.Schema(
@@ -35,5 +36,21 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         DOMAIN,
         SERVICE_SYNC_HISTORY,
         async_sync_history,
+        schema=SERVICE_SCHEMA,
+    )
+
+    async def async_sync_total_history(call: ServiceCall) -> None:
+        """Sync only the Daikin total/compressor energy history."""
+        days_ago = call.data.get(ATTR_DAYS_AGO, 0)
+
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            if hasattr(entry, "runtime_data") and entry.runtime_data:
+                coordinator = entry.runtime_data
+                await coordinator.async_sync_total_history(days_ago=days_ago)
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SYNC_TOTAL_HISTORY,
+        async_sync_total_history,
         schema=SERVICE_SCHEMA,
     )
