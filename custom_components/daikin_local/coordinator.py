@@ -303,7 +303,11 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                     _LOGGER.debug("Found entity_id %s for %s", entity_id, key)
                     await self._import_data_to_stats(entity_id, data, base_date)
 
-    async def async_sync_total_history(self, days_ago: int = 0) -> None:
+    async def async_sync_total_history(
+        self,
+        days_ago: int = 0,
+        target_entity_id: str | None = None,
+    ) -> None:
         """Sync *only* the smoothed total/compressor energy history.
 
         This is meant as a targeted correction service for the total sensor.
@@ -339,41 +343,54 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
             for target_days_ago in reversed(days_to_sync):
                 if target_days_ago == 0:
-                    total_data = self.device.values.get("curr_day_energy", [])
-                    cool_data = self.device.values.get("curr_day_cool", [])
-                    heat_data = self.device.values.get("curr_day_heat", [])
+                    total_keys = (
+                        "curr_day_total_global",
+                        "curr_day_energy_total_global",
+                        "curr_day_energy",
+                    )
                 elif target_days_ago == 1:
-                    total_data = self.device.values.get("prev_1day_energy", [])
-                    cool_data = self.device.values.get("prev_1day_cool", [])
-                    heat_data = self.device.values.get("prev_1day_heat", [])
+                    total_keys = (
+                        "prev_1day_total_global",
+                        "prev_1day_energy_total_global",
+                        "prev_1day_energy",
+                    )
                 else:
-                    total_data = self.device.values.get(
-                        f"prev_{target_days_ago}day_energy", []
+                    total_keys = (
+                        f"prev_{target_days_ago}day_total_global",
+                        f"prev_{target_days_ago}day_energy_total_global",
+                        f"prev_{target_days_ago}day_energy",
                     )
-                    cool_data = self.device.values.get(
-                        f"prev_{target_days_ago}day_cool", []
-                    )
-                    heat_data = self.device.values.get(
-                        f"prev_{target_days_ago}day_heat", []
-                    )
+
+                selected_key: str | None = None
+                total_data = []
+                for key in total_keys:
+                    raw_value = self.device.values.get(key, [])
+                    parsed = parse_daikin_list(raw_value)
+                    if parsed:
+                        selected_key = key
+                        total_data = parsed
+                        break
 
                 base_date = dt_util.start_of_local_day() - timedelta(
                     days=target_days_ago
                 )
 
                 total_list = parse_daikin_list(total_data)
-                cool_list = parse_daikin_list(cool_data)
-                heat_list = parse_daikin_list(heat_data)
-
-                # Fallback: if total isn't provided, reconstruct from cool/heat.
-                if not total_list and (cool_list or heat_list):
-                    cool_list = _normalize_24(cool_list)
-                    heat_list = _normalize_24(heat_list)
-                    total_list = [c + h for c, h in zip(cool_list, heat_list)]
-
                 if not total_list:
+                    _LOGGER.warning(
+                        "No total history key available for %s (days_ago=%s); "
+                        "skipping total history correction for this day",
+                        self.name,
+                        target_days_ago,
+                    )
                     continue
 
+                _LOGGER.debug(
+                    "Using %s for total history sync on %s (days_ago=%s)",
+                    selected_key,
+                    self.name,
+                    target_days_ago,
+                )
                 total_list = _normalize_24(total_list)
 
                 ent_reg = er.async_get(self.hass)
@@ -387,6 +404,9 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                         self.name,
                         unique_id,
                     )
+                    continue
+
+                if target_entity_id and entity_id != target_entity_id:
                     continue
 
                 await self._import_data_to_stats(entity_id, total_list, base_date)

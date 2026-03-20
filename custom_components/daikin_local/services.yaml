@@ -29,3 +29,11 @@ sync_total_history:
           min: 0
           max: 1
           mode: box
+    entity_id:
+      name: Target total entity
+      description: Optional sensor entity_id to target a single total/compressor sensor.
+      required: false
+      selector:
+        entity:
+          filter:
+            domain: sensor
