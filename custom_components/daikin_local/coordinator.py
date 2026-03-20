@@ -163,6 +163,15 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             heat_data = self.device.values.get("prev_1day_heat", [])
             base_date = dt_util.start_of_local_day() - timedelta(days=1)
 
+        # Fallback: if normal_data is empty but we have cool/heat, sum them up
+        if not normal_data and (cool_data or heat_data):
+            _LOGGER.debug("curr_day_energy missing for %s, calculating from cool/heat", self.name)
+            c_list = parse_daikin_list(cool_data)
+            h_list = parse_daikin_list(heat_data)
+            c_list += [0] * (24 - len(c_list))
+            h_list += [0] * (24 - len(h_list))
+            normal_data = [c + h for c, h in zip(c_list, h_list)]
+
         _LOGGER.debug(
             "Data for %s: normal=%s, cool=%s, heat=%s",
             self.name, normal_data, cool_data, heat_data
@@ -177,14 +186,19 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             ATTR_HEAT_ENERGY: heat_data,
         }.items():
             data = parse_daikin_list(raw_data)
-            if not data:
+            if not data or sum(data) == 0:
                 continue
 
             unique_id = f"{self.device.mac}-{key}"
             entity_id = ent_reg.async_get_entity_id("sensor", DOMAIN, unique_id)
             if not entity_id:
+                _LOGGER.warning(
+                    "Entity not found for %s (unique_id: %s). Is the sensor enabled?",
+                    self.name, unique_id
+                )
                 continue
 
+            _LOGGER.debug("Found entity_id %s for %s", entity_id, key)
             self.hass.async_create_task(
                 self._import_data_to_stats(entity_id, data, base_date)
             )
