@@ -30,11 +30,12 @@ StatisticData = None
 StatisticMetaData = None
 async_import_statistics = None
 StatisticMeanType = None
+statistics_during_period = None
 
 
 def _ensure_recorder_statistics_api() -> bool:
     """Try to load HA recorder statistics import API at runtime."""
-    global StatisticData, StatisticMetaData, async_import_statistics, StatisticMeanType, async_get_statistics
+    global StatisticData, StatisticMetaData, async_import_statistics, StatisticMeanType, statistics_during_period
 
     if async_import_statistics is not None and StatisticData is not None:
         return True
@@ -46,7 +47,7 @@ def _ensure_recorder_statistics_api() -> bool:
         )
         from homeassistant.components.recorder.statistics import (
             async_import_statistics as _async_import_statistics,
-            async_get_statistics as _async_get_statistics,
+            statistics_during_period as _statistics_during_period,
         )
         # In recent Home Assistant versions, StatisticMeanType is defined in
         # recorder models (not in recorder.const).
@@ -58,7 +59,7 @@ def _ensure_recorder_statistics_api() -> bool:
     StatisticData = _StatisticData
     StatisticMetaData = _StatisticMetaData
     async_import_statistics = _async_import_statistics
-    async_get_statistics = _async_get_statistics
+    statistics_during_period = _statistics_during_period
     StatisticMeanType = _StatisticMeanType
     return True
 
@@ -354,13 +355,19 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         cumulative_delta = 0.0
 
         last_sum = 0.0
-        if async_get_statistics is not None:
-            last_stats = await async_get_statistics(
+        if statistics_during_period is not None:
+            # Query the last available absolute sum right before base_date.
+            # This is needed so the injected `sum` stays monotone and
+            # HA doesn't detect a "reset" on the day/hour boundary.
+            last_stats = await self.hass.async_add_executor_job(
+                statistics_during_period,
                 self.hass,
-                start_time=base_date - timedelta(hours=48),
-                end_time=base_date,
-                statistic_ids=[entity_id],
-                period="hour",
+                base_date - timedelta(hours=48),
+                base_date,
+                {entity_id},
+                "hour",
+                {"energy": UnitOfEnergy.KILO_WATT_HOUR},
+                {"sum"},
             )
             if entity_id in last_stats and last_stats[entity_id]:
                 last_sum = last_stats[entity_id][-1].get("sum") or 0.0
