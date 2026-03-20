@@ -34,7 +34,7 @@ StatisticMeanType = None
 
 def _ensure_recorder_statistics_api() -> bool:
     """Try to load HA recorder statistics import API at runtime."""
-    global StatisticData, StatisticMetaData, async_import_statistics, StatisticMeanType
+    global StatisticData, StatisticMetaData, async_import_statistics, StatisticMeanType, async_get_statistics
 
     if async_import_statistics is not None and StatisticData is not None:
         return True
@@ -46,6 +46,7 @@ def _ensure_recorder_statistics_api() -> bool:
         )
         from homeassistant.components.recorder.statistics import (
             async_import_statistics as _async_import_statistics,
+            async_get_statistics as _async_get_statistics,
         )
         # In recent Home Assistant versions, StatisticMeanType is defined in
         # recorder models (not in recorder.const).
@@ -57,6 +58,7 @@ def _ensure_recorder_statistics_api() -> bool:
     StatisticData = _StatisticData
     StatisticMetaData = _StatisticMetaData
     async_import_statistics = _async_import_statistics
+    async_get_statistics = _async_get_statistics
     StatisticMeanType = _StatisticMeanType
     return True
 
@@ -345,9 +347,23 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         the hour and include `last_reset` (we assume the counter resets at
         local midnight for the "today" entities).
         """
-        # The "today" energy sensors reset at local midnight, so we start the
-        # cumulative counter at 0 for this day.
-        cumulative_sum = 0.0
+        # HA expects `sum` for total_increasing sensors to be monotone across
+        # days (it represents an absolute counter), while `state` can reset.
+        # To do that, we rebase our injected hourly `sum` on the last known
+        # sum right before `base_date`.
+        cumulative_delta = 0.0
+
+        last_sum = 0.0
+        if async_get_statistics is not None:
+            last_stats = await async_get_statistics(
+                self.hass,
+                start_time=base_date - timedelta(hours=48),
+                end_time=base_date,
+                statistic_ids=[entity_id],
+                period="hour",
+            )
+            if entity_id in last_stats and last_stats[entity_id]:
+                last_sum = last_stats[entity_id][-1].get("sum") or 0.0
 
         metadata: StatisticMetaData = {
             "mean_type": StatisticMeanType.NONE,
@@ -369,7 +385,8 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 break
             
             delta = delta_int / 10.0  # Convert to kWh
-            cumulative_sum += delta
+            cumulative_delta += delta
+            cumulative_sum = last_sum + cumulative_delta
             
             start_time = base_date + timedelta(hours=hour)
             start_time_utc = dt_util.as_utc(start_time)
@@ -380,10 +397,10 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             statistics.append(
                 StatisticData(
                     start=start_time_utc,
-                    # `state` and `sum` represent the counter value at the end
-                    # of the hour (HA takes the "last" value during the period
-                    # when compiling hourly/daily rollups).
-                    state=cumulative_sum,
+                    # For total_increasing sensors:
+                    # - `state` is the counter that may reset at midnight.
+                    # - `sum` is the monotone absolute counter for deltas/change.
+                    state=cumulative_delta,
                     sum=cumulative_sum,
                     last_reset=base_date,
                 )
