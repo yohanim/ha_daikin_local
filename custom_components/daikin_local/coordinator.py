@@ -24,19 +24,39 @@ from .const import (
 )
 from .utils import calculate_energy_sum, parse_daikin_list
 
-try:
-    from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
-    from homeassistant.components.recorder.statistics import (
-        async_import_statistics,
-    )
-    from homeassistant.components.recorder.const import StatisticMeanType
-except ImportError:
-    # Fallback for environments without recorder
-    StatisticData = None
-    StatisticMetaData = None
-    async_import_statistics = None
-    async_get_statistics = None
-    StatisticMeanType = None
+# Recorder statistics are only available when the recorder integration is loaded.
+# We therefore import them lazily when we actually need to inject history.
+StatisticData = None
+StatisticMetaData = None
+async_import_statistics = None
+StatisticMeanType = None
+
+
+def _ensure_recorder_statistics_api() -> bool:
+    """Try to load HA recorder statistics import API at runtime."""
+    global StatisticData, StatisticMetaData, async_import_statistics, StatisticMeanType
+
+    if async_import_statistics is not None and StatisticData is not None:
+        return True
+
+    try:
+        from homeassistant.components.recorder.models import (
+            StatisticData as _StatisticData,
+            StatisticMetaData as _StatisticMetaData,
+        )
+        from homeassistant.components.recorder.statistics import (
+            async_import_statistics as _async_import_statistics,
+        )
+        from homeassistant.components.recorder.const import StatisticMeanType as _StatisticMeanType
+    except ImportError as err:
+        _LOGGER.debug("Recorder statistics API import failed: %s", err)
+        return False
+
+    StatisticData = _StatisticData
+    StatisticMetaData = _StatisticMetaData
+    async_import_statistics = _async_import_statistics
+    StatisticMeanType = _StatisticMeanType
+    return True
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -179,7 +199,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
     async def async_sync_history(self, days_ago: int = 0) -> None:
         """Sync energy history with Daikin historical data."""
-        if async_import_statistics is None:
+        if not _ensure_recorder_statistics_api():
             key = f"{DOMAIN}_recorder_stats_unavailable_logged"
             if not self.hass.data.get(key):
                 _LOGGER.warning(
