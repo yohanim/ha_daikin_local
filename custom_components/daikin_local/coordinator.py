@@ -10,6 +10,7 @@ from pydaikin.daikin_base import Appliance
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_TIMEOUT, UnitOfEnergy
 from homeassistant.core import HomeAssistant
+from homeassistant.components import recorder
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
@@ -18,7 +19,6 @@ from .const import (
     ATTR_COOL_ENERGY,
     ATTR_ENERGY_TODAY,
     ATTR_HEAT_ENERGY,
-    ATTR_TOTAL_ENERGY_TODAY,
     DOMAIN,
     TIMEOUT_SEC,
 )
@@ -311,11 +311,6 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
                 for key, data in {
                     ATTR_ENERGY_TODAY: normal_list,
-                    # When users configure the Energy dashboard with the smoothed
-                    # "compressor energy" sensor, we still need to inject the
-                    # historical counter values (based on Daikin totals) so the
-                    # consolidated graphs can be corrected.
-                    ATTR_TOTAL_ENERGY_TODAY: normal_list,
                     ATTR_COOL_ENERGY: cool_list,
                     ATTR_HEAT_ENERGY: heat_list,
                 }.items():
@@ -360,7 +355,9 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             # Query the last available absolute sum right before base_date.
             # This is needed so the injected `sum` stays monotone and
             # HA doesn't detect a "reset" on the day/hour boundary.
-            last_stats = await self.hass.async_add_executor_job(
+            last_stats = await recorder.get_instance(
+                self.hass
+            ).async_add_executor_job(
                 statistics_during_period,
                 self.hass,
                 base_date - timedelta(hours=48),
