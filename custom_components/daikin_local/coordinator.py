@@ -208,7 +208,11 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 self.hass.data[key] = True
             return
 
-        _LOGGER.debug("Syncing energy history for %s (days_ago=%s)", self.name, days_ago)
+        _LOGGER.info(
+            "Syncing energy history for %s (days_ago=%s)",
+            self.name,
+            days_ago,
+        )
 
         async with self._history_sync_lock:
             # Attempt to fetch historical data explicitly if pydaikin supports it
