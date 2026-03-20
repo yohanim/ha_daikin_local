@@ -4,6 +4,7 @@ import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import logging
+import re
 
 from pydaikin.daikin_base import Appliance
 
@@ -341,25 +342,48 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                     values += [0] * (24 - len(values))
                 return values
 
-            for target_days_ago in reversed(days_to_sync):
+            def _candidate_keys_for_day(target_days_ago: int) -> list[str]:
+                values = self.device.values
                 if target_days_ago == 0:
-                    total_keys = (
-                        "curr_day_total_global",
-                        "curr_day_energy_total_global",
-                        "curr_day_energy",
-                    )
-                elif target_days_ago == 1:
-                    total_keys = (
-                        "prev_1day_total_global",
-                        "prev_1day_energy_total_global",
-                        "prev_1day_energy",
-                    )
+                    day_markers = ("curr_day", "today")
                 else:
-                    total_keys = (
-                        f"prev_{target_days_ago}day_total_global",
-                        f"prev_{target_days_ago}day_energy_total_global",
-                        f"prev_{target_days_ago}day_energy",
-                    )
+                    day_markers = (f"prev_{target_days_ago}day",)
+
+                preferred: list[str] = []
+                fallback: list[str] = []
+                for key in values:
+                    key_l = key.lower()
+                    if not any(marker in key_l for marker in day_markers):
+                        continue
+                    # Total correction must not use segmented cool/heat streams.
+                    if "cool" in key_l or "heat" in key_l:
+                        continue
+
+                    # Keep only active keys which currently expose usable
+                    # history data.
+                    if not parse_daikin_list(values.get(key, [])):
+                        continue
+
+                    # Prefer explicit "total/global" style keys.
+                    if (
+                        "total_global" in key_l
+                        or "global_total" in key_l
+                        or re.search(r"\btotal\b", key_l)
+                    ):
+                        preferred.append(key)
+                        continue
+
+                    # Accept generic energy day keys as fallback.
+                    if "energy" in key_l:
+                        fallback.append(key)
+
+                # Keep deterministic order for debugging/reproducibility.
+                preferred.sort()
+                fallback.sort()
+                return preferred + fallback
+
+            for target_days_ago in reversed(days_to_sync):
+                total_keys = _candidate_keys_for_day(target_days_ago)
 
                 selected_key: str | None = None
                 total_data = []
@@ -377,11 +401,13 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
                 total_list = parse_daikin_list(total_data)
                 if not total_list:
-                    _LOGGER.warning(
+                    _LOGGER.debug(
                         "No total history key available for %s (days_ago=%s); "
-                        "skipping total history correction for this day",
+                        "skipping total history correction for this day. "
+                        "Candidates=%s",
                         self.name,
                         target_days_ago,
+                        total_keys,
                     )
                     continue
 
