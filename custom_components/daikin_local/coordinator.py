@@ -92,8 +92,11 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         now = dt_util.utcnow()
         current_power = getattr(self.device, "current_total_power_consumption", 0) or 0
         
-        # Calculate base energy from history arrays
-        today_energy = self._get_sum_from_daikin_key("curr_day_energy")
+        # Use property for smoothing if available, fallback to history sum
+        real_total_energy_today = (
+            getattr(self.device, "today_total_energy_consumption", 0) or 0
+        )
+        # Calculate base energy from history arrays for cool/heat
         today_cool = self._get_sum_from_daikin_key("curr_day_cool")
         today_heat = self._get_sum_from_daikin_key("curr_day_heat")
 
@@ -103,10 +106,10 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             energy_delta = avg_power * delta_h
             self._integrated_total_energy += energy_delta
 
-        # Reset integration when history updates (new block arrival)
-        if today_energy != self._last_total_energy_today:
+        # Reset integration when base history or total counter updates
+        if real_total_energy_today != self._last_total_energy_today:
             self._integrated_total_energy = 0
-            self._last_total_energy_today = today_energy
+            self._last_total_energy_today = real_total_energy_today
 
         self._last_update_time = now
         self._last_power = current_power
@@ -121,8 +124,8 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
         return DaikinData(
             appliance=self.device,
-            calculated_total_energy_today=today_energy + self._integrated_total_energy,
-            today_energy=today_energy,
+            calculated_total_energy_today=real_total_energy_today + self._integrated_total_energy,
+            today_energy=real_total_energy_today,
             today_cool_energy=today_cool,
             today_heat_energy=today_heat,
         )
@@ -191,16 +194,23 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
     ) -> None:
         """Import a list of hourly deltas into HA statistics."""
         # Get last known statistic sum to avoid resets in the UI
+        # Search back 48h to be sure to find the last known sum before our window
         last_stats = await async_get_statistics(
             self.hass,
-            start_time=base_date - timedelta(hours=1),
+            start_time=base_date - timedelta(hours=48),
             statistic_ids=[entity_id],
             period="hour",
         )
 
         cumulative_sum = 0.0
-        if entity_id in last_stats:
+        if entity_id in last_stats and last_stats[entity_id]:
+            # Use the sum of the last available record
             cumulative_sum = last_stats[entity_id][-1].get("sum") or 0.0
+        else:
+            # If no history found, we might be starting from scratch
+            # However, if we are in the middle of a day, starting at 0 will look like a reset
+            # So we only start if cumulative_sum is really 0 and we have no other choice
+            _LOGGER.debug("No previous statistics found for %s within 48h", entity_id)
 
         metadata: StatisticMetaData = {
             "has_mean": False,
