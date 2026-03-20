@@ -179,10 +179,6 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             # Sync both today and (recently) yesterday to catch late data
             # that crosses the midnight boundary.
             self.hass.async_create_task(self.async_sync_history(days_ago=0))
-
-            local_midnight = dt_util.start_of_local_day()
-            if now < local_midnight + timedelta(hours=3):
-                self.hass.async_create_task(self.async_sync_history(days_ago=1))
             self._last_history_sync = now
 
         return DaikinData(
@@ -217,6 +213,16 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         )
 
         async with self._history_sync_lock:
+            # Home Assistant uses "change" between day/hour boundaries.
+            # For correct "today" values we also need yesterday's final sum
+            # at the day boundary, so always import both when requested for
+            # today.
+            # General rule: to compute the first hour of day X, we also
+            # need the final sum of the previous day (X+1, relative to the
+            # Daikin "prev_1day_*" indexing).
+            days_to_sync = [days_ago, days_ago + 1]
+            days_to_sync = sorted(set(d for d in days_to_sync if d >= 0))
+
             # Attempt to fetch historical data explicitly if pydaikin supports it
             if hasattr(self.device, "get_day_power_ex"):
                 _LOGGER.debug("Fetching extended day power data for %s", self.name)
@@ -229,87 +235,105 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                         err,
                     )
 
-            # Get historical data arrays
-            if days_ago == 0:
-                normal_data = self.device.values.get("curr_day_energy", [])
-                cool_data = self.device.values.get("curr_day_cool", [])
-                heat_data = self.device.values.get("curr_day_heat", [])
-                base_date = dt_util.start_of_local_day()
-            else:
-                normal_data = self.device.values.get("prev_1day_energy", [])
-                cool_data = self.device.values.get("prev_1day_cool", [])
-                heat_data = self.device.values.get("prev_1day_heat", [])
-                base_date = dt_util.start_of_local_day() - timedelta(days=1)
-
             def _normalize_24(values: list[int]) -> list[int]:
                 values = values[:24]
                 if len(values) < 24:
                     values += [0] * (24 - len(values))
                 return values
 
-            normal_list = parse_daikin_list(normal_data)
-            cool_list = parse_daikin_list(cool_data)
-            heat_list = parse_daikin_list(heat_data)
-
-            normal_available = bool(normal_list)
-            cool_available = bool(cool_list)
-            heat_available = bool(heat_list)
-
-            # Fallback: if normal_data is empty but we have cool/heat, sum them up
-            if not normal_available and (cool_list or heat_list):
-                _LOGGER.debug(
-                    "Energy missing for %s, calculating from cool/heat", self.name
-                )
-                cool_list = _normalize_24(cool_list)
-                heat_list = _normalize_24(heat_list)
-                normal_list = [c + h for c, h in zip(cool_list, heat_list)]
-                normal_available = True
-
-            # Normalize to 24 hourly deltas so all days compile consistently.
-            normal_list = _normalize_24(normal_list) if normal_available else []
-            cool_list = _normalize_24(cool_list) if cool_available else []
-            heat_list = _normalize_24(heat_list) if heat_available else []
-
-            _LOGGER.debug(
-                "Data for %s: normal=%s, cool=%s, heat=%s",
-                self.name,
-                normal_list,
-                cool_list,
-                heat_list,
-            )
-
-            # Map to actual entity IDs
-            ent_reg = er.async_get(self.hass)
-
-            for key, data in {
-                ATTR_ENERGY_TODAY: normal_list,
-                # When users configure the Energy dashboard with the smoothed
-                # "compressor energy" sensor, we still need to inject the
-                # historical counter values (based on Daikin totals) so the
-                # consolidated graphs can be corrected.
-                ATTR_TOTAL_ENERGY_TODAY: normal_list,
-                ATTR_COOL_ENERGY: cool_list,
-                ATTR_HEAT_ENERGY: heat_list,
-            }.items():
-                if not data:
-                    continue
-
-                unique_id = f"{self.device.mac}-{key}"
-                entity_id = ent_reg.async_get_entity_id(
-                    "sensor", DOMAIN, unique_id
-                )
-                if not entity_id:
-                    _LOGGER.warning(
-                        "Entity not found for %s (unique_id: %s). Is the sensor enabled?",
-                        self.name,
-                        unique_id,
+            # Import each requested day.
+            for target_days_ago in days_to_sync:
+                # Get historical data arrays
+                if target_days_ago == 0:
+                    normal_data = self.device.values.get("curr_day_energy", [])
+                    cool_data = self.device.values.get("curr_day_cool", [])
+                    heat_data = self.device.values.get("curr_day_heat", [])
+                elif target_days_ago == 1:
+                    normal_data = self.device.values.get("prev_1day_energy", [])
+                    cool_data = self.device.values.get("prev_1day_cool", [])
+                    heat_data = self.device.values.get("prev_1day_heat", [])
+                else:
+                    # Some Daikin models (via get_day_power_ex) expose more
+                    # previous-day keys.
+                    normal_data = self.device.values.get(
+                        f"prev_{target_days_ago}day_energy", []
                     )
-                    continue
+                    cool_data = self.device.values.get(
+                        f"prev_{target_days_ago}day_cool", []
+                    )
+                    heat_data = self.device.values.get(
+                        f"prev_{target_days_ago}day_heat", []
+                    )
 
-                _LOGGER.debug("Found entity_id %s for %s", entity_id, key)
-                self.hass.async_create_task(
-                    self._import_data_to_stats(entity_id, data, base_date)
+                base_date = dt_util.start_of_local_day() - timedelta(
+                    days=target_days_ago
                 )
+
+                normal_list = parse_daikin_list(normal_data)
+                cool_list = parse_daikin_list(cool_data)
+                heat_list = parse_daikin_list(heat_data)
+
+                normal_available = bool(normal_list)
+                cool_available = bool(cool_list)
+                heat_available = bool(heat_list)
+
+                # Fallback: if normal_data is empty but we have cool/heat, sum them up
+                if not normal_available and (cool_list or heat_list):
+                    _LOGGER.debug(
+                        "Energy missing for %s, calculating from cool/heat",
+                        self.name,
+                    )
+                    cool_list = _normalize_24(cool_list)
+                    heat_list = _normalize_24(heat_list)
+                    normal_list = [c + h for c, h in zip(cool_list, heat_list)]
+                    normal_available = True
+
+                # Normalize to 24 hourly deltas so all days compile consistently.
+                normal_list = _normalize_24(normal_list) if normal_available else []
+                cool_list = _normalize_24(cool_list) if cool_available else []
+                heat_list = _normalize_24(heat_list) if heat_available else []
+
+                _LOGGER.debug(
+                    "Data for %s (days_ago=%s): normal=%s, cool=%s, heat=%s",
+                    self.name,
+                    target_days_ago,
+                    normal_list,
+                    cool_list,
+                    heat_list,
+                )
+
+                # Map to actual entity IDs
+                ent_reg = er.async_get(self.hass)
+
+                for key, data in {
+                    ATTR_ENERGY_TODAY: normal_list,
+                    # When users configure the Energy dashboard with the smoothed
+                    # "compressor energy" sensor, we still need to inject the
+                    # historical counter values (based on Daikin totals) so the
+                    # consolidated graphs can be corrected.
+                    ATTR_TOTAL_ENERGY_TODAY: normal_list,
+                    ATTR_COOL_ENERGY: cool_list,
+                    ATTR_HEAT_ENERGY: heat_list,
+                }.items():
+                    if not data:
+                        continue
+
+                    unique_id = f"{self.device.mac}-{key}"
+                    entity_id = ent_reg.async_get_entity_id(
+                        "sensor", DOMAIN, unique_id
+                    )
+                    if not entity_id:
+                        _LOGGER.warning(
+                            "Entity not found for %s (unique_id: %s). Is the sensor enabled?",
+                            self.name,
+                            unique_id,
+                        )
+                        continue
+
+                    _LOGGER.debug("Found entity_id %s for %s", entity_id, key)
+                    self.hass.async_create_task(
+                        self._import_data_to_stats(entity_id, data, base_date)
+                    )
 
     async def _import_data_to_stats(
         self, entity_id: str, data: list[int], base_date: datetime
