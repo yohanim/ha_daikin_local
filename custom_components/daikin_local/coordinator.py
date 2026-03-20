@@ -19,13 +19,17 @@ from .utils import calculate_energy_sum, parse_daikin_list
 
 try:
     from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
-    from homeassistant.components.recorder.statistics import async_import_statistics
+    from homeassistant.components.recorder.statistics import (
+        async_import_statistics,
+        async_get_statistics,
+    )
     from homeassistant.components.recorder.const import StatisticMeanType
 except ImportError:
     # Fallback for environments without recorder
     StatisticData = None
     StatisticMetaData = None
     async_import_statistics = None
+    async_get_statistics = None
     StatisticMeanType = None
 
 _LOGGER = logging.getLogger(__name__)
@@ -138,6 +142,14 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
         _LOGGER.debug("Syncing energy history for %s (days_ago=%s)", self.name, days_ago)
 
+        # Attempt to fetch historical data explicitly if pydaikin supports it
+        if hasattr(self.device, "get_day_power_ex"):
+            _LOGGER.debug("Fetching extended day power data for %s", self.name)
+            try:
+                await self.device.get_day_power_ex()
+            except Exception as err:
+                _LOGGER.warning("Failed to fetch extended power data for %s: %s", self.name, err)
+
         # Get historical data arrays
         if days_ago == 0:
             normal_data = self.device.values.get("curr_day_energy", [])
@@ -149,6 +161,11 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             cool_data = self.device.values.get("prev_1day_cool", [])
             heat_data = self.device.values.get("prev_1day_heat", [])
             base_date = dt_util.start_of_local_day() - timedelta(days=1)
+
+        _LOGGER.debug(
+            "Data for %s: normal=%s, cool=%s, heat=%s",
+            self.name, normal_data, cool_data, heat_data
+        )
 
         # Map to actual entity IDs
         ent_reg = er.async_get(self.hass)
@@ -167,12 +184,26 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             if not entity_id:
                 continue
 
-            self._import_data_to_stats(entity_id, data, base_date)
+            self.hass.async_create_task(
+                self._import_data_to_stats(entity_id, data, base_date)
+            )
 
-    def _import_data_to_stats(
+    async def _import_data_to_stats(
         self, entity_id: str, data: list[int], base_date: datetime
     ) -> None:
         """Import a list of hourly deltas into HA statistics."""
+        # Get last known statistic sum to avoid resets in the UI
+        last_stats = await async_get_statistics(
+            self.hass,
+            start_time=base_date - timedelta(hours=1),
+            statistic_ids=[entity_id],
+            period="hour",
+        )
+
+        cumulative_sum = 0.0
+        if entity_id in last_stats:
+            cumulative_sum = last_stats[entity_id][-1].get("sum") or 0.0
+
         metadata: StatisticMetaData = {
             "has_mean": False,
             "mean_type": StatisticMeanType.NONE,
@@ -185,7 +216,6 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         }
 
         statistics = []
-        cumulative_sum = 0.0
         
         # Values are typically in 0.1 kWh
         for hour, delta_int in enumerate(data):
@@ -193,6 +223,9 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 break
             
             delta = delta_int / 10.0  # Convert to kWh
+            if delta <= 0:
+                continue
+
             cumulative_sum += delta
             
             start_time = base_date + timedelta(hours=hour)
@@ -211,9 +244,10 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
         if statistics:
             _LOGGER.debug(
-                "Importing %s hourly data points for %s on %s",
+                "Importing %s hourly data points for %s on %s (starting sum: %s)",
                 len(statistics),
                 entity_id,
                 base_date.date(),
+                cumulative_sum - sum(s["state"] for s in statistics),
             )
             async_import_statistics(self.hass, metadata, statistics)
