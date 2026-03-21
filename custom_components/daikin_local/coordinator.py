@@ -21,6 +21,7 @@ from .const import (
     ATTR_ENERGY_TODAY,
     ATTR_HEAT_ENERGY,
     ATTR_TOTAL_ENERGY_TODAY,
+    CONF_AUTO_HISTORY_SYNC,
     DOMAIN,
     TIMEOUT_SEC,
 )
@@ -70,6 +71,15 @@ _LOGGER = logging.getLogger(__name__)
 type DaikinConfigEntry = ConfigEntry[DaikinCoordinator]
 
 
+def _poll_timeout_sec(entry: ConfigEntry) -> int:
+    """Polling timeout: stored in entry data; optional legacy copy in options."""
+    return (
+        entry.data.get(CONF_TIMEOUT)
+        or entry.options.get(CONF_TIMEOUT)
+        or TIMEOUT_SEC
+    )
+
+
 @dataclass
 class DaikinData:
     """Class to hold Daikin data."""
@@ -109,9 +119,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
     async def _async_update_data(self) -> DaikinData:
         """Update data."""
-        timeout = self.config_entry.options.get(
-            CONF_TIMEOUT, self.config_entry.data.get(CONF_TIMEOUT, TIMEOUT_SEC)
-        )
+        timeout = _poll_timeout_sec(self.config_entry)
         try:
             async with asyncio.timeout(timeout):
                 await self.device.update_status()
@@ -145,16 +153,16 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         self._last_update_time = now
         self._last_power = current_power
 
-        # Periodic history sync (every hour)
-        if (
-            self._last_history_sync is None
-            or now - self._last_history_sync > timedelta(hours=1)
-        ):
-            # Daikin can report consumption with a delay.
-            # Sync both today and (recently) yesterday to catch late data
-            # that crosses the midnight boundary.
-            self.hass.async_create_task(self.async_sync_history(days_ago=0))
-            self._last_history_sync = now
+        # Optional periodic history sync (every hour) — OFF by default.
+        # Injecting LTS is heavy on the recorder; enable only if you want
+        # automatic backfill without calling services manually.
+        if self.config_entry.options.get(CONF_AUTO_HISTORY_SYNC, False):
+            if (
+                self._last_history_sync is None
+                or now - self._last_history_sync > timedelta(hours=1)
+            ):
+                self.hass.async_create_task(self.async_sync_history(days_ago=0))
+                self._last_history_sync = now
 
         return DaikinData(
             appliance=self.device,
@@ -170,8 +178,17 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         data = parse_daikin_list(raw_data)
         return calculate_energy_sum(data)
 
-    async def async_sync_history(self, days_ago: int = 0) -> None:
-        """Sync energy history with Daikin historical data."""
+    async def async_sync_history(
+        self,
+        days_ago: int = 0,
+        target_entity_id: str | None = None,
+    ) -> None:
+        """Sync energy history with Daikin historical data.
+
+        Only sensors owned by this config entry are ever passed to the recorder.
+        Optional ``target_entity_id`` limits the run to a single sensor entity
+        (must still belong to this device entry).
+        """
         if not _ensure_recorder_statistics_api():
             key = f"{DOMAIN}_recorder_stats_unavailable_logged"
             if not self.hass.data.get(key):
@@ -294,6 +311,9 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                             self.name,
                             unique_id,
                         )
+                        continue
+
+                    if target_entity_id and entity_id != target_entity_id:
                         continue
 
                     _LOGGER.debug("Found entity_id %s for %s", entity_id, key)
@@ -545,7 +565,35 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         each statistic entry must represent the counter value at the end of
         the hour and include `last_reset` (we assume the counter resets at
         local midnight for the "today" entities).
+
+        Imports are refused unless the entity is registered and tied to *this*
+        config entry — so a bug or wrong ID cannot target another integration.
         """
+        ent_reg = er.async_get(self.hass)
+        reg_entry = ent_reg.async_get(entity_id)
+        if reg_entry is None:
+            _LOGGER.warning(
+                "Statistics import skipped: %s is not in the entity registry",
+                entity_id,
+            )
+            return
+        if reg_entry.config_entry_id != self.config_entry.entry_id:
+            _LOGGER.error(
+                "Refusing statistics import for %s: not owned by this device entry "
+                "(expected config_entry_id=%s, got %s)",
+                entity_id,
+                self.config_entry.entry_id,
+                reg_entry.config_entry_id,
+            )
+            return
+        if reg_entry.platform != DOMAIN:
+            _LOGGER.error(
+                "Refusing statistics import for %s: wrong platform (%s)",
+                entity_id,
+                reg_entry.platform,
+            )
+            return
+
         # HA expects `sum` for total_increasing sensors to be monotone across
         # days (it represents an absolute counter), while `state` can reset.
         # To do that, we rebase our injected hourly `sum` on the last known

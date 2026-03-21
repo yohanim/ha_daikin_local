@@ -13,6 +13,14 @@ sync_history:
           min: 0
           max: 1
           mode: box
+    entity_id:
+      name: Target sensor (optional)
+      description: If set, only this Daikin energy sensor is corrected (must belong to this integration).
+      required: false
+      selector:
+        entity:
+          filter:
+            domain: sensor
 
 sync_total_history:
   name: Sync total energy history

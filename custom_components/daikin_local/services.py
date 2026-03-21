@@ -27,12 +27,16 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     async def async_sync_history(call: ServiceCall) -> None:
         """Sync history for all or specific Daikin devices."""
         days_ago = call.data.get(ATTR_DAYS_AGO, 0)
-        
+        target_entity_id = call.data.get(ATTR_ENTITY_ID)
+
         # In HA 2026.3, runtime_data is stored in entry.runtime_data
         for entry in hass.config_entries.async_entries(DOMAIN):
             if hasattr(entry, "runtime_data") and entry.runtime_data:
                 coordinator = entry.runtime_data
-                await coordinator.async_sync_history(days_ago=days_ago)
+                await coordinator.async_sync_history(
+                    days_ago=days_ago,
+                    target_entity_id=target_entity_id,
+                )
 
     hass.services.async_register(
         DOMAIN,

@@ -2,13 +2,15 @@
   "config": {
     "abort": {
       "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
-      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]"
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]"
     },
     "error": {
       "api_password": "Invalid authentication, use either API Key or Password.",
       "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
       "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
-      "unknown": "[%key:common::config_flow::error::unknown%]"
+      "unknown": "[%key:common::config_flow::error::unknown%]",
+      "wrong_device": "The device at this address is not the same unit (MAC mismatch). Use the correct IP or add a new device."
     },
     "step": {
       "user": {
@@ -21,11 +23,22 @@
         "description": "Enter the IP address of your Daikin AC.\nIf your device is set up with a password or API-key, please use that, in all other cases leave the fields blank.",
         "title": "Configure Daikin AC"
       },
-      "init": {
+      "reconfigure": {
         "data": {
+          "api_key": "[%key:common::config_flow::data::api_key%]",
+          "host": "[%key:common::config_flow::data::host%]",
+          "password": "[%key:common::config_flow::data::password%]",
           "timeout": "Request timeout (seconds)"
         },
-        "title": "Configure Daikin AC options"
+        "description": "Update the IP address or credentials for this Daikin unit. Leave API key and password empty to keep current values unchanged, or re-enter them to replace.",
+        "title": "Reconfigure Daikin AC"
+      },
+      "init": {
+        "data": {
+          "auto_history_sync": "Hourly auto-sync of energy statistics to the recorder"
+        },
+        "description": "Optional settings. Auto-sync writes long-term statistics every hour; leave off unless you need it and use the services for manual corrections.",
+        "title": "Daikin AC options"
       }
     }
   },
@@ -37,6 +50,24 @@
         "days_ago": {
           "name": "Days ago",
           "description": "Number of days back to sync (0 for Today, 1 for Yesterday)."
+        },
+        "entity_id": {
+          "name": "Target sensor (optional)",
+          "description": "If set, only this Daikin energy sensor is updated."
+        }
+      }
+    },
+    "sync_total_history": {
+      "name": "Sync total energy history",
+      "description": "Corrects the total/compressor energy history (use sparingly).",
+      "fields": {
+        "days_ago": {
+          "name": "Days ago",
+          "description": "0 = today only, 1 = yesterday and today."
+        },
+        "entity_id": {
+          "name": "Target total sensor (optional)",
+          "description": "Limit the fix to one total-energy entity."
         }
       }
     }

@@ -22,9 +22,10 @@ ATTR_STATE_ON = "on"
 ATTR_STATE_OFF = "off"
 
 KEY_MAC = "mac"
-KEY_IP = "ip"
 
 CONF_TIMEOUT = "timeout"
+# When True, periodically inject Daikin hourly energy into recorder LTS (opt-in).
+CONF_AUTO_HISTORY_SYNC = "auto_history_sync"
 
 ZONE_NAME_UNCONFIGURED = "-"
 

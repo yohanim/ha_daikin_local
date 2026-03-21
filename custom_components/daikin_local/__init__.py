@@ -43,7 +43,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bo
 
     session = async_get_clientsession(hass)
     host = conf[CONF_HOST]
-    timeout = entry.options.get(CONF_TIMEOUT, entry.data.get(CONF_TIMEOUT, TIMEOUT_SEC))
+    # Timeout lives in config entry data (add / reconfigure). Legacy: options only.
+    timeout = conf.get(CONF_TIMEOUT) or entry.options.get(CONF_TIMEOUT) or TIMEOUT_SEC
     try:
         async with asyncio.timeout(timeout):
             device: Appliance = await DaikinFactory(

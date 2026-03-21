@@ -2,13 +2,15 @@
   "config": {
     "abort": {
       "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
-      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]"
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]"
     },
     "error": {
       "api_password": "Authentification invalide, utilisez soit une clé API, soit un mot de passe.",
       "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
       "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
-      "unknown": "[%key:common::config_flow::error::unknown%]"
+      "unknown": "[%key:common::config_flow::error::unknown%]",
+      "wrong_device": "L'appareil à cette adresse n'est pas la même unité (MAC différent). Vérifiez l'IP ou ajoutez un nouvel appareil."
     },
     "step": {
       "user": {
@@ -21,10 +23,21 @@
         "description": "Entrez l'adresse IP de votre unité Daikin.\nSi votre appareil est configuré avec un mot de passe ou une clé API, veuillez les renseigner, sinon laissez les champs vides.",
         "title": "Configurer Daikin"
       },
-      "init": {
+      "reconfigure": {
         "data": {
+          "api_key": "[%key:common::config_flow::data::api_key%]",
+          "host": "[%key:common::config_flow::data::host%]",
+          "password": "[%key:common::config_flow::data::password%]",
           "timeout": "Délai d'expiration (secondes)"
         },
+        "description": "Modifiez l'adresse IP ou les identifiants. Laissez clé API et mot de passe vides pour conserver les valeurs actuelles.",
+        "title": "Reconfigurer Daikin"
+      },
+      "init": {
+        "data": {
+          "auto_history_sync": "Synchronisation automatique horaire des stats d'énergie (recorder)"
+        },
+        "description": "La synchro auto injecte des statistiques dans l'enregistreur ; laissez désactivé sauf besoin et utilisez les actions manuelles.",
         "title": "Options Daikin"
       }
     }
@@ -37,6 +50,24 @@
         "days_ago": {
           "name": "Jours passés",
           "description": "Nombre de jours en arrière à synchroniser (0 pour Aujourd'hui, 1 pour Hier)."
+        },
+        "entity_id": {
+          "name": "Capteur cible (optionnel)",
+          "description": "Si renseigné, seul ce capteur d'énergie Daikin est mis à jour."
+        }
+      }
+    },
+    "sync_total_history": {
+      "name": "Synchroniser l'historique du total énergie",
+      "description": "Corrige l'historique du capteur total / compresseur (à utiliser avec parcimonie).",
+      "fields": {
+        "days_ago": {
+          "name": "Jours passés",
+          "description": "0 = aujourd'hui seulement, 1 = hier et aujourd'hui."
+        },
+        "entity_id": {
+          "name": "Capteur total (optionnel)",
+          "description": "Limite la correction à une entité total énergie."
         }
       }
     }
