@@ -169,7 +169,7 @@
       "message": "La zone {zone_id} n'est pas active."
     },
     "zone_missing": {
-      "message": "La zone {zone_id} n'existe pas."
+      "message": "La zone {zone_id} n'existe pas. Les zones disponibles sont 0 à {max_zone}."
     },
     "zone_parameters_unavailable": {
       "message": "Cet appareil n'expose pas les paramètres de température de zone requis."

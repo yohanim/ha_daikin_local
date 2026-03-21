@@ -9,6 +9,7 @@ from aiohttp import ClientConnectionError
 from pydaikin.daikin_base import Appliance
 from pydaikin.factory import DaikinFactory
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_TIMEOUT, Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
@@ -24,6 +25,17 @@ _LOGGER = logging.getLogger(__name__)
 
 
 PLATFORMS = [Platform.CLIMATE, Platform.SENSOR, Platform.SWITCH]
+
+_OBSOLETE_CONFIG_KEYS = frozenset({"api_key", "password", "uuid"})
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate config entries from v1 to v2 (matches config_flow FlowHandler.VERSION)."""
+    if entry.version > 1:
+        return True
+    new_data = {k: v for k, v in entry.data.items() if k not in _OBSOLETE_CONFIG_KEYS}
+    hass.config_entries.async_update_entry(entry, data=new_data, version=2)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bool:
