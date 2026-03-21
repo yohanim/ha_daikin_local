@@ -21,6 +21,13 @@ sync_history:
         entity:
           filter:
             domain: sensor
+    insert_missing:
+      name: Insert missing hourly rows
+      description: "If false (default), only hours that already have long-term statistics are updated — avoids UNIQUE constraint errors with the recorder. Set true to backfill gaps (use sparingly)."
+      required: false
+      default: false
+      selector:
+        boolean:
 
 sync_total_history:
   name: Sync total energy history
@@ -45,3 +52,10 @@ sync_total_history:
         entity:
           filter:
             domain: sensor
+    insert_missing:
+      name: Insert missing hourly rows
+      description: "Same as sync_history: default false updates only existing LTS hours; true inserts missing hours (may conflict with recorder compilation)."
+      required: false
+      default: false
+      selector:
+        boolean:

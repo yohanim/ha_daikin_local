@@ -54,6 +54,10 @@
         "entity_id": {
           "name": "Capteur cible (optionnel)",
           "description": "Si renseigné, seul ce capteur d'énergie Daikin est mis à jour."
+        },
+        "insert_missing": {
+          "name": "Créer les créneaux manquants",
+          "description": "Si désactivé (défaut), seuls les créneaux qui ont déjà des statistiques long terme sont mis à jour — évite les erreurs UNIQUE avec le recorder. Activez pour combler les trous."
         }
       }
     },
@@ -68,6 +72,10 @@
         "entity_id": {
           "name": "Capteur total (optionnel)",
           "description": "Limite la correction à une entité total énergie."
+        },
+        "insert_missing": {
+          "name": "Créer les créneaux manquants",
+          "description": "Comme sync_history : désactivé par défaut = mise à jour seulement ; activé = insertion des heures manquantes (risque de conflit avec le recorder)."
         }
       }
     }

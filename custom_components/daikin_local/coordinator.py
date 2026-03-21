@@ -182,12 +182,19 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         self,
         days_ago: int = 0,
         target_entity_id: str | None = None,
+        *,
+        insert_missing: bool = False,
     ) -> None:
         """Sync energy history with Daikin historical data.
 
         Only sensors owned by this config entry are ever passed to the recorder.
         Optional ``target_entity_id`` limits the run to a single sensor entity
         (must still belong to this device entry).
+
+        ``insert_missing`` (default False): only update hours that already have a
+        long-term statistics row. This avoids UNIQUE constraint errors when the
+        recorder's hourly compiler tries to INSERT the same hour. Set True to
+        backfill gaps (may log duplicate-row warnings in rare races).
         """
         if not _ensure_recorder_statistics_api():
             key = f"{DOMAIN}_recorder_stats_unavailable_logged"
@@ -317,12 +324,19 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                         continue
 
                     _LOGGER.debug("Found entity_id %s for %s", entity_id, key)
-                    await self._import_data_to_stats(entity_id, data, base_date)
+                    await self._import_data_to_stats(
+                        entity_id,
+                        data,
+                        base_date,
+                        insert_missing=insert_missing,
+                    )
 
     async def async_sync_total_history(
         self,
         days_ago: int = 0,
         target_entity_id: str | None = None,
+        *,
+        insert_missing: bool = False,
     ) -> None:
         """Sync *only* the smoothed total/compressor energy history.
 
@@ -554,10 +568,20 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 if target_entity_id and entity_id != target_entity_id:
                     continue
 
-                await self._import_data_to_stats(entity_id, total_list, base_date)
+                await self._import_data_to_stats(
+                    entity_id,
+                    total_list,
+                    base_date,
+                    insert_missing=insert_missing,
+                )
 
     async def _import_data_to_stats(
-        self, entity_id: str, data: list[int], base_date: datetime
+        self,
+        entity_id: str,
+        data: list[int],
+        base_date: datetime,
+        *,
+        insert_missing: bool = False,
     ) -> None:
         """Import a list of hourly energy values into HA statistics.
 
@@ -568,6 +592,10 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
         Imports are refused unless the entity is registered and tied to *this*
         config entry — so a bug or wrong ID cannot target another integration.
+
+        When ``insert_missing`` is False (default), hours without an existing
+        long-term statistics row are skipped so the recorder's hourly compiler
+        does not hit UNIQUE (metadata_id, start_ts) conflicts with our INSERTs.
         """
         ent_reg = er.async_get(self.hass)
         reg_entry = ent_reg.async_get(entity_id)
@@ -593,6 +621,45 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 reg_entry.platform,
             )
             return
+
+        def _hour_index_local_day(row_start: datetime, day_start: datetime) -> int | None:
+            """Hour index 0..23 for row within the local calendar day of day_start."""
+            row_local = dt_util.as_local(row_start)
+            base_local = dt_util.as_local(day_start)
+            if row_local.date() != base_local.date():
+                return None
+            delta = row_local - base_local
+            h = int(delta.total_seconds() // 3600)
+            if 0 <= h < 24:
+                return h
+            return None
+
+        # Hours that already have an LTS row (avoid competing INSERTs with recorder).
+        existing_hours: set[int] = set()
+        if statistics_during_period is not None and not insert_missing:
+            day_end = base_date + timedelta(days=1)
+            day_rows = await recorder.get_instance(self.hass).async_add_executor_job(
+                statistics_during_period,
+                self.hass,
+                dt_util.as_utc(base_date),
+                dt_util.as_utc(day_end),
+                {entity_id},
+                "hour",
+                {"energy": UnitOfEnergy.KILO_WATT_HOUR},
+                {"sum"},
+            )
+            if entity_id in day_rows:
+                for row in day_rows[entity_id]:
+                    start = row.get("start")
+                    if start is None:
+                        continue
+                    if isinstance(start, str):
+                        start = dt_util.parse_datetime(start)
+                    if start is None:
+                        continue
+                    hi = _hour_index_local_day(start, base_date)
+                    if hi is not None:
+                        existing_hours.add(hi)
 
         # HA expects `sum` for total_increasing sensors to be monotone across
         # days (it represents an absolute counter), while `state` can reset.
@@ -635,7 +702,8 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         }
 
         statistics = []
-        
+        skipped_no_row = 0
+
         # Values are typically in 0.1 kWh
         padded = data[:24] + [0] * max(0, 24 - len(data))
         for hour, delta_int in enumerate(padded):
@@ -652,6 +720,10 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             if start_time_utc > dt_util.utcnow():
                 break
 
+            if not insert_missing and hour not in existing_hours:
+                skipped_no_row += 1
+                continue
+
             statistics.append(
                 StatisticData(
                     start=start_time_utc,
@@ -666,10 +738,22 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
         if statistics:
             _LOGGER.debug(
-                "Importing %s hourly data points for %s on %s (starting sum: %s)",
+                "Importing %s hourly data points for %s on %s (starting sum: %s, "
+                "insert_missing=%s, skipped_hours_without_row=%s)",
                 len(statistics),
                 entity_id,
                 base_date.date(),
                 last_sum,
+                insert_missing,
+                skipped_no_row,
             )
             async_import_statistics(self.hass, metadata, statistics)
+        elif not insert_missing and not statistics and skipped_no_row:
+            _LOGGER.warning(
+                "Statistics import for %s on %s produced no updates (no existing "
+                "hourly LTS rows for this day). Wait for the recorder to compile the "
+                "day, then retry; or use service parameter insert_missing=true to "
+                "insert missing hours (may rarely log duplicate-statistics warnings).",
+                entity_id,
+                base_date.date(),
+            )

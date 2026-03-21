@@ -54,6 +54,10 @@
         "entity_id": {
           "name": "Target sensor (optional)",
           "description": "If set, only this Daikin energy sensor is updated."
+        },
+        "insert_missing": {
+          "name": "Insert missing hourly rows",
+          "description": "If off (default), only hours that already have long-term statistics are updated, avoiding duplicate-row errors with the recorder. Turn on to backfill gaps."
         }
       }
     },
@@ -68,6 +72,10 @@
         "entity_id": {
           "name": "Target total sensor (optional)",
           "description": "Limit the fix to one total-energy entity."
+        },
+        "insert_missing": {
+          "name": "Insert missing hourly rows",
+          "description": "Same as sync_history: default off updates only existing LTS hours; on inserts missing hours (may conflict with recorder compilation)."
         }
       }
     }

@@ -53,6 +53,10 @@ If you observe **missing long-term statistics for unrelated devices**, that usua
 
 Enable **Options → Auto history sync** only if you explicitly want periodic injection without using services. (Polling **timeout** is set when adding the device or under **Reconfigure**, not in Options.)
 
+### Recorder `UNIQUE constraint` on `statistics` (metadata_id, start_ts)
+
+If you see errors about **duplicate statistic rows** when correcting history: the integration now **updates only hours that already have long-term statistics rows** by default (`insert_missing` = false on services). That avoids clashing with Home Assistant’s hourly statistics compiler, which also inserts into the same table. Use **`insert_missing: true`** only when you need to **backfill** hours that have no row yet (rare recorder warnings may still appear).
+
 ### Technical note: can this integration erase *all* consumption statistics?
 
 **No — not through the import API we use.** In Home Assistant Core, `async_import_statistics` queues a job that runs `_import_statistics_with_session`: it loads metadata for **one** `statistic_id`, then **inserts or updates** hourly rows **only** for that statistic’s `metadata_id`. There is **no** “delete all other sensors” path in that code path.
