@@ -6,38 +6,34 @@
       "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]"
     },
     "error": {
-      "api_password": "Authentification invalide, utilisez soit une clé API, soit un mot de passe.",
       "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
-      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
       "unknown": "[%key:common::config_flow::error::unknown%]",
       "wrong_device": "L'appareil à cette adresse n'est pas la même unité (MAC différent). Vérifiez l'IP ou ajoutez un nouvel appareil."
     },
     "step": {
       "user": {
         "data": {
-          "api_key": "[%key:common::config_flow::data::api_key%]",
           "host": "[%key:common::config_flow::data::host%]",
-          "password": "[%key:common::config_flow::data::password%]",
-          "timeout": "Délai d'expiration (secondes)"
+          "timeout": "Intervalle de rafraîchissement (secondes)"
         },
-        "description": "Entrez l'adresse IP de votre unité Daikin.\nSi votre appareil est configuré avec un mot de passe ou une clé API, veuillez les renseigner, sinon laissez les champs vides.",
+        "description": "Entrez l'adresse IP de votre unité Daikin.\nL'intervalle de rafraîchissement est la fréquence à laquelle Home Assistant interroge l'appareil (même valeur pour le test de connexion).",
         "title": "Configurer Daikin"
       },
       "reconfigure": {
         "data": {
-          "api_key": "[%key:common::config_flow::data::api_key%]",
           "host": "[%key:common::config_flow::data::host%]",
-          "password": "[%key:common::config_flow::data::password%]",
-          "timeout": "Délai d'expiration (secondes)"
+          "timeout": "Intervalle de rafraîchissement (secondes)"
         },
-        "description": "Modifiez l'adresse IP ou les identifiants. Laissez clé API et mot de passe vides pour conserver les valeurs actuelles.",
+        "description": "Modifiez l'adresse IP ou l'intervalle de rafraîchissement.",
         "title": "Reconfigurer Daikin"
       },
       "init": {
         "data": {
-          "auto_history_sync": "Synchronisation automatique horaire des stats d'énergie (recorder)"
+          "timeout": "Intervalle de rafraîchissement (secondes)",
+          "auto_history_sync": "Synchronisation automatique horaire des stats d'énergie (recorder)",
+          "insert_missing": "Autoriser l'insertion des créneaux horaires manquants (stats)"
         },
-        "description": "La synchro auto injecte des statistiques dans l'enregistreur ; laissez désactivé sauf besoin et utilisez les actions manuelles.",
+        "description": "L'intervalle de rafraîchissement ici remplace celui défini à l'ajout si renseigné. La synchro auto injecte des statistiques chaque heure (charge sur le recorder). « Insertion manquants » : lors des corrections d'historique, autoriser la création de lignes pour les heures sans donnée (rare conflit avec le recorder ; les actions peuvent surcharger).",
         "title": "Options Daikin"
       }
     }

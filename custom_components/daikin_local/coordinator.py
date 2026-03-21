@@ -22,6 +22,7 @@ from .const import (
     ATTR_HEAT_ENERGY,
     ATTR_TOTAL_ENERGY_TODAY,
     CONF_AUTO_HISTORY_SYNC,
+    CONF_INSERT_MISSING,
     DOMAIN,
     TIMEOUT_SEC,
 )
@@ -72,10 +73,10 @@ type DaikinConfigEntry = ConfigEntry[DaikinCoordinator]
 
 
 def _poll_timeout_sec(entry: ConfigEntry) -> int:
-    """Polling timeout: stored in entry data; optional legacy copy in options."""
+    """Polling interval (seconds): options override data when set."""
     return (
-        entry.data.get(CONF_TIMEOUT)
-        or entry.options.get(CONF_TIMEOUT)
+        entry.options.get(CONF_TIMEOUT)
+        or entry.data.get(CONF_TIMEOUT)
         or TIMEOUT_SEC
     )
 
@@ -98,9 +99,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         self, hass: HomeAssistant, entry: DaikinConfigEntry, device: Appliance
     ) -> None:
         """Initialize global Daikin data updater."""
-        timeout = entry.options.get(
-            CONF_TIMEOUT, entry.data.get(CONF_TIMEOUT, TIMEOUT_SEC)
-        )
+        timeout = _poll_timeout_sec(entry)
         super().__init__(
             hass,
             _LOGGER,
@@ -161,7 +160,9 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 self._last_history_sync is None
                 or now - self._last_history_sync > timedelta(hours=1)
             ):
-                self.hass.async_create_task(self.async_sync_history(days_ago=0))
+                self.hass.async_create_task(
+                    self.async_sync_history(days_ago=0, insert_missing=None)
+                )
                 self._last_history_sync = now
 
         return DaikinData(
@@ -183,7 +184,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         days_ago: int = 0,
         target_entity_id: str | None = None,
         *,
-        insert_missing: bool = False,
+        insert_missing: bool | None = None,
     ) -> None:
         """Sync energy history with Daikin historical data.
 
@@ -191,11 +192,12 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         Optional ``target_entity_id`` limits the run to a single sensor entity
         (must still belong to this device entry).
 
-        ``insert_missing`` (default False): only update hours that already have a
-        long-term statistics row. This avoids UNIQUE constraint errors when the
-        recorder's hourly compiler tries to INSERT the same hour. Set True to
-        backfill gaps (may log duplicate-row warnings in rare races).
+        ``insert_missing``: None = use integration option ``insert_missing``;
+        False = only update hours that already have LTS rows; True = may insert
+        missing hours (risk of recorder UNIQUE conflicts).
         """
+        if insert_missing is None:
+            insert_missing = self.config_entry.options.get(CONF_INSERT_MISSING, False)
         if not _ensure_recorder_statistics_api():
             key = f"{DOMAIN}_recorder_stats_unavailable_logged"
             if not self.hass.data.get(key):
@@ -336,14 +338,18 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         days_ago: int = 0,
         target_entity_id: str | None = None,
         *,
-        insert_missing: bool = False,
+        insert_missing: bool | None = None,
     ) -> None:
         """Sync *only* the smoothed total/compressor energy history.
 
         This is meant as a targeted correction service for the total sensor.
         It should be used rarely because it can influence Energy dashboard
         calculations depending on which entities are configured.
+
+        ``insert_missing``: None = use integration option (same as sync_history).
         """
+        if insert_missing is None:
+            insert_missing = self.config_entry.options.get(CONF_INSERT_MISSING, False)
         if not _ensure_recorder_statistics_api():
             key = f"{DOMAIN}_recorder_stats_unavailable_logged"
             if not self.hass.data.get(key):

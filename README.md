@@ -29,6 +29,10 @@ A custom integration for Home Assistant to locally control Daikin air conditione
 2. Copy it into the `custom_components` directory of your Home Assistant installation.
 3. Restart Home Assistant.
 
+### Translations
+
+UI strings: `custom_components/daikin_local/strings.json` (English, required by some tooling) mirrors `translations/en.json`; other languages live in `translations/` (e.g. `fr.json`). Keys under `config.step.*.data` must match the **field names** in `config_flow.py` (e.g. `host`, `timeout`); values like `[%key:common::config_flow::data::host%]` reuse Home Assistant’s built‑in labels. When you change English strings, update **`strings.json` and `translations/en.json` together** so they stay in sync.
+
 ## ⚙️ Configuration
 
 1. Go to **Settings** > **Devices & Services**.
@@ -51,7 +55,9 @@ If you observe **missing long-term statistics for unrelated devices**, that usua
      Parameter: `days_ago` — `0` = today only, `1` = yesterday then today.
    - **`daikin_local.sync_total_history`** — total-energy sensor only (optional `entity_id`).
 
-Enable **Options → Auto history sync** only if you explicitly want periodic injection without using services. (Polling **timeout** is set when adding the device or under **Reconfigure**, not in Options.)
+Enable **Options → Auto history sync** only if you explicitly want periodic injection without using services. (Polling interval is set when adding the device, under **Reconfigure**, or in **Options** — Options override the value stored at setup when set.)
+
+**Integration options** also set the default for **insert missing hourly rows** when running `sync_history` / `sync_total_history` without the `insert_missing` parameter; you can still override per service call.
 
 ### Recorder `UNIQUE constraint` on `statistics` (metadata_id, start_ts)
 

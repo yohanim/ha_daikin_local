@@ -7,20 +7,18 @@ from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 
-from .const import DOMAIN
+from .const import CONF_INSERT_MISSING, DOMAIN
 
 SERVICE_SYNC_HISTORY = "sync_history"
 SERVICE_SYNC_TOTAL_HISTORY = "sync_total_history"
 ATTR_DAYS_AGO = "days_ago"
-ATTR_INSERT_MISSING = "insert_missing"
-
 SERVICE_SCHEMA = vol.Schema(
     {
         vol.Optional(ATTR_DAYS_AGO, default=0): vol.All(
             vol.Coerce(int), vol.Range(min=0, max=1)
         ),
         vol.Optional(ATTR_ENTITY_ID): vol.Coerce(str),
-        vol.Optional(ATTR_INSERT_MISSING, default=False): cv.boolean,
+        vol.Optional(CONF_INSERT_MISSING): cv.boolean,
     }
 )
 
@@ -31,7 +29,11 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         """Sync history for all or specific Daikin devices."""
         days_ago = call.data.get(ATTR_DAYS_AGO, 0)
         target_entity_id = call.data.get(ATTR_ENTITY_ID)
-        insert_missing = call.data.get(ATTR_INSERT_MISSING, False)
+        insert_missing = (
+            call.data[CONF_INSERT_MISSING]
+            if CONF_INSERT_MISSING in call.data
+            else None
+        )
 
         # In HA 2026.3, runtime_data is stored in entry.runtime_data
         for entry in hass.config_entries.async_entries(DOMAIN):
@@ -54,7 +56,11 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         """Sync only the Daikin total/compressor energy history."""
         days_ago = call.data.get(ATTR_DAYS_AGO, 0)
         target_entity_id = call.data.get(ATTR_ENTITY_ID)
-        insert_missing = call.data.get(ATTR_INSERT_MISSING, False)
+        insert_missing = (
+            call.data[CONF_INSERT_MISSING]
+            if CONF_INSERT_MISSING in call.data
+            else None
+        )
 
         for entry in hass.config_entries.async_entries(DOMAIN):
             if hasattr(entry, "runtime_data") and entry.runtime_data:

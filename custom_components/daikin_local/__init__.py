@@ -9,20 +9,12 @@ from aiohttp import ClientConnectionError
 from pydaikin.daikin_base import Appliance
 from pydaikin.factory import DaikinFactory
 
-from homeassistant.const import (
-    CONF_API_KEY,
-    CONF_HOST,
-    CONF_PASSWORD,
-    CONF_TIMEOUT,
-    CONF_UUID,
-    Platform,
-)
+from homeassistant.const import CONF_HOST, CONF_TIMEOUT, Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
-from homeassistant.util.ssl import client_context_no_verify
 
 from .const import KEY_MAC, TIMEOUT_SEC, DOMAIN
 from .coordinator import DaikinConfigEntry, DaikinCoordinator
@@ -43,18 +35,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bo
 
     session = async_get_clientsession(hass)
     host = conf[CONF_HOST]
-    # Timeout lives in config entry data (add / reconfigure). Legacy: options only.
-    timeout = conf.get(CONF_TIMEOUT) or entry.options.get(CONF_TIMEOUT) or TIMEOUT_SEC
+    # Polling / connection timeout: options override data (same as coordinator).
+    timeout = entry.options.get(CONF_TIMEOUT) or conf.get(CONF_TIMEOUT) or TIMEOUT_SEC
     try:
         async with asyncio.timeout(timeout):
-            device: Appliance = await DaikinFactory(
-                host,
-                session,
-                key=entry.data.get(CONF_API_KEY),
-                uuid=entry.data.get(CONF_UUID),
-                password=entry.data.get(CONF_PASSWORD),
-                ssl_context=client_context_no_verify(),
-            )
+            device: Appliance = await DaikinFactory(host, session)
         _LOGGER.debug("Connection to %s successful", host)
     except TimeoutError as err:
         _LOGGER.debug("Connection to %s timed out in %s seconds", host, timeout)

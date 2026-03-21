@@ -5,9 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 from typing import Any
-from uuid import uuid4
 
-from aiohttp import ClientError, web_exceptions
+from aiohttp import ClientError
 from pydaikin.daikin_base import Appliance
 from pydaikin.discovery import Discovery
 from pydaikin.exceptions import DaikinException
@@ -21,19 +20,19 @@ from homeassistant.config_entries import (
     OptionsFlow,
     callback,
 )
-from homeassistant.const import (
-    CONF_API_KEY,
-    CONF_HOST,
-    CONF_PASSWORD,
-    CONF_TIMEOUT,
-    CONF_UUID,
-)
+from homeassistant.const import CONF_HOST
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
-from homeassistant.util.ssl import client_context_no_verify
 
-from .const import CONF_AUTO_HISTORY_SYNC, DOMAIN, KEY_MAC, TIMEOUT_SEC
+from .const import (
+    CONF_AUTO_HISTORY_SYNC,
+    CONF_INSERT_MISSING,
+    CONF_TIMEOUT,
+    DOMAIN,
+    KEY_MAC,
+    TIMEOUT_SEC,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,7 +40,7 @@ _LOGGER = logging.getLogger(__name__)
 class FlowHandler(ConfigFlow, domain=DOMAIN):
     """Handle a config flow."""
 
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self) -> None:
         """Initialize the Daikin config flow."""
@@ -59,8 +58,6 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
         return vol.Schema(
             {
                 vol.Required(CONF_HOST, default=self.host): str,
-                vol.Optional(CONF_API_KEY): str,
-                vol.Optional(CONF_PASSWORD): str,
                 vol.Optional(CONF_TIMEOUT, default=TIMEOUT_SEC): int,
             }
         )
@@ -69,9 +66,6 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
         self,
         host: str,
         mac: str,
-        key: str | None = None,
-        uuid: str | None = None,
-        password: str | None = None,
         timeout: int = TIMEOUT_SEC,
     ) -> ConfigFlowResult:
         """Register new entry."""
@@ -84,9 +78,6 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
             data={
                 CONF_HOST: host,
                 KEY_MAC: mac,
-                CONF_API_KEY: key,
-                CONF_UUID: uuid,
-                CONF_PASSWORD: password,
                 CONF_TIMEOUT: timeout,
             },
         )
@@ -94,30 +85,14 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
     async def _create_device(
         self,
         host: str,
-        key: str | None = None,
-        password: str | None = None,
         timeout: int = TIMEOUT_SEC,
     ) -> ConfigFlowResult:
         """Create device."""
-        # BRP07Cxx devices needs uuid together with key
-        if key:
-            uuid = str(uuid4())
-        else:
-            uuid = None
-            key = None
-
-        if not password:
-            password = None
-
         try:
             async with asyncio.timeout(timeout):
                 device: Appliance = await DaikinFactory(
                     host,
                     async_get_clientsession(self.hass),
-                    key=key,
-                    uuid=uuid,
-                    password=password,
-                    ssl_context=client_context_no_verify(),
                 )
         except (TimeoutError, ClientError):
             self.host = None
@@ -125,12 +100,6 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
                 step_id="user",
                 data_schema=self.schema,
                 errors={"base": "cannot_connect"},
-            )
-        except web_exceptions.HTTPForbidden:
-            return self.async_show_form(
-                step_id="user",
-                data_schema=self.schema,
-                errors={"base": "invalid_auth"},
             )
         except DaikinException as daikin_exp:
             _LOGGER.error(daikin_exp)
@@ -148,7 +117,7 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
             )
 
         mac = device.mac
-        return await self._create_entry(host, mac, key, uuid, password, timeout)
+        return await self._create_entry(host, mac, timeout)
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -156,17 +125,8 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
         """User initiated config flow."""
         if user_input is None:
             return self.async_show_form(step_id="user", data_schema=self.schema)
-        if user_input.get(CONF_API_KEY) and user_input.get(CONF_PASSWORD):
-            self.host = user_input[CONF_HOST]
-            return self.async_show_form(
-                step_id="user",
-                data_schema=self.schema,
-                errors={"base": "api_password"},
-            )
         return await self._create_device(
             user_input[CONF_HOST],
-            user_input.get(CONF_API_KEY),
-            user_input.get(CONF_PASSWORD),
             user_input.get(CONF_TIMEOUT, TIMEOUT_SEC),
         )
 
@@ -193,67 +153,44 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Let the user change host, credentials, and timeout for an existing entry."""
+        """Let the user change host and timeout for an existing entry."""
         entry = self._get_reconfigure_entry()
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            form_key = (user_input.get(CONF_API_KEY) or "").strip()
-            form_password = (user_input.get(CONF_PASSWORD) or "").strip()
-            if form_key and form_password:
-                errors["base"] = "api_password"
+            host = user_input[CONF_HOST]
+            timeout = user_input.get(CONF_TIMEOUT, TIMEOUT_SEC)
+            try:
+                async with asyncio.timeout(timeout):
+                    device: Appliance = await DaikinFactory(
+                        host,
+                        async_get_clientsession(self.hass),
+                    )
+            except (TimeoutError, ClientError):
+                errors["base"] = "cannot_connect"
+            except DaikinException as daikin_exp:
+                _LOGGER.error(daikin_exp)
+                errors["base"] = "unknown"
+            except Exception:
+                _LOGGER.exception("Unexpected error reconfiguring device")
+                errors["base"] = "unknown"
             else:
-                host = user_input[CONF_HOST]
-                timeout = user_input.get(CONF_TIMEOUT, TIMEOUT_SEC)
-                if form_key:
-                    key = form_key
-                    uuid = str(uuid4())
+                if device.mac != entry.data[KEY_MAC]:
+                    errors["base"] = "wrong_device"
                 else:
-                    key = entry.data.get(CONF_API_KEY)
-                    uuid = entry.data.get(CONF_UUID)
-                password = form_password if form_password else entry.data.get(CONF_PASSWORD)
-                try:
-                    async with asyncio.timeout(timeout):
-                        device: Appliance = await DaikinFactory(
-                            host,
-                            async_get_clientsession(self.hass),
-                            key=key,
-                            uuid=uuid,
-                            password=password,
-                            ssl_context=client_context_no_verify(),
-                        )
-                except (TimeoutError, ClientError):
-                    errors["base"] = "cannot_connect"
-                except web_exceptions.HTTPForbidden:
-                    errors["base"] = "invalid_auth"
-                except DaikinException as daikin_exp:
-                    _LOGGER.error(daikin_exp)
-                    errors["base"] = "unknown"
-                except Exception:
-                    _LOGGER.exception("Unexpected error reconfiguring device")
-                    errors["base"] = "unknown"
-                else:
-                    if device.mac != entry.data[KEY_MAC]:
-                        errors["base"] = "wrong_device"
-                    else:
-                        return self.async_update_reload_and_abort(
-                            entry,
-                            data_updates={
-                                CONF_HOST: host,
-                                CONF_API_KEY: key,
-                                CONF_UUID: uuid,
-                                CONF_PASSWORD: password,
-                                CONF_TIMEOUT: timeout,
-                            },
-                        )
+                    return self.async_update_reload_and_abort(
+                        entry,
+                        data_updates={
+                            CONF_HOST: host,
+                            CONF_TIMEOUT: timeout,
+                        },
+                    )
 
         schema = vol.Schema(
             {
                 vol.Required(
                     CONF_HOST, default=entry.data[CONF_HOST]
                 ): str,
-                vol.Optional(CONF_API_KEY): str,
-                vol.Optional(CONF_PASSWORD): str,
                 vol.Optional(
                     CONF_TIMEOUT,
                     default=entry.data.get(CONF_TIMEOUT, TIMEOUT_SEC),
@@ -283,17 +220,27 @@ class OptionsFlowHandler(OptionsFlow):
             merged = {**self.config_entry.options, **user_input}
             return self.async_create_entry(title="", data=merged)
 
+        suggested = {
+            CONF_TIMEOUT: self.config_entry.options.get(CONF_TIMEOUT)
+            or self.config_entry.data.get(CONF_TIMEOUT, TIMEOUT_SEC),
+            CONF_AUTO_HISTORY_SYNC: self.config_entry.options.get(
+                CONF_AUTO_HISTORY_SYNC, False
+            ),
+            CONF_INSERT_MISSING: self.config_entry.options.get(
+                CONF_INSERT_MISSING, False
+            ),
+        }
         return self.async_show_form(
             step_id="init",
             data_schema=self.add_suggested_values_to_schema(
                 vol.Schema(
                     {
-                        vol.Optional(
-                            CONF_AUTO_HISTORY_SYNC, default=False
-                        ): cv.boolean,
+                        vol.Optional(CONF_TIMEOUT, default=TIMEOUT_SEC): int,
+                        vol.Optional(CONF_AUTO_HISTORY_SYNC, default=False): cv.boolean,
+                        vol.Optional(CONF_INSERT_MISSING, default=False): cv.boolean,
                     }
                 ),
-                self.config_entry.options,
+                suggested,
             ),
         )
 
