@@ -72,6 +72,25 @@ _LOGGER = logging.getLogger(__name__)
 type DaikinConfigEntry = ConfigEntry[DaikinCoordinator]
 
 
+def _lts_row_start_to_datetime(
+    start: datetime | str | float | int | None,
+) -> datetime | None:
+    """Convert recorder LTS row ``start`` to a datetime.
+
+    Newer Home Assistant returns Unix timestamps (float/int) for ``start``;
+    older code paths used ISO strings or datetime objects.
+    """
+    if start is None:
+        return None
+    if isinstance(start, datetime):
+        return start
+    if isinstance(start, str):
+        return dt_util.parse_datetime(start)
+    if isinstance(start, (int, float)):
+        return dt_util.utc_from_timestamp(float(start))
+    return None
+
+
 def _poll_timeout_sec(entry: ConfigEntry) -> int:
     """Polling interval (seconds): options override data when set."""
     return (
@@ -656,11 +675,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             )
             if entity_id in day_rows:
                 for row in day_rows[entity_id]:
-                    start = row.get("start")
-                    if start is None:
-                        continue
-                    if isinstance(start, str):
-                        start = dt_util.parse_datetime(start)
+                    start = _lts_row_start_to_datetime(row.get("start"))
                     if start is None:
                         continue
                     hi = _hour_index_local_day(start, base_date)
