@@ -72,6 +72,24 @@ _LOGGER = logging.getLogger(__name__)
 type DaikinConfigEntry = ConfigEntry[DaikinCoordinator]
 
 
+def _recent_completed_hours_by_local_date() -> dict[datetime.date, set[int]]:
+    """Hour indices for the last 3 completed local hours (skipping 2).
+
+    We intentionally exclude:
+    - the current hour (hour in progress)
+    - the previous hour
+
+    So we inject only hours that are at least 2 hours in the past. This
+    reduces “day not compiled yet” warnings near local midnight.
+    """
+    now_local = dt_util.as_local(dt_util.utcnow())
+    mapping: dict[datetime.date, set[int]] = {}
+    for k in (2, 3, 4):
+        t = now_local - timedelta(hours=k)
+        mapping.setdefault(t.date(), set()).add(t.hour)
+    return mapping
+
+
 def _lts_row_start_to_datetime(
     start: datetime | str | float | int | None,
 ) -> datetime | None:
@@ -233,10 +251,23 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         )
 
         async with self._history_sync_lock:
-            # Requested behavior:
-            # - days_ago=0 -> sync today only
-            # - days_ago=1 -> sync yesterday, then today
-            days_to_sync = [0] if days_ago == 0 else [0, 1]
+            # Inject only the last 3 completed local hours (skip current + previous).
+            # This avoids trying to correct hours/whole days that the recorder has
+            # not compiled yet (common right after local midnight).
+            recent_hours_by_date = _recent_completed_hours_by_local_date()
+            today_start = dt_util.start_of_local_day()
+            today_date = today_start.date()
+            yesterday_date = (today_start - timedelta(days=1)).date()
+
+            days_to_sync: list[int] = []
+            if today_date in recent_hours_by_date:
+                days_to_sync.append(0)
+            if yesterday_date in recent_hours_by_date:
+                days_to_sync.append(1)
+            if not days_to_sync:
+                # Fallback to the previous behavior if, for some reason,
+                # we couldn't compute the target day offsets.
+                days_to_sync = [0] if days_ago == 0 else [0, 1]
 
             # Attempt to fetch historical data explicitly if pydaikin supports it
             if hasattr(self.device, "get_day_power_ex"):
@@ -284,6 +315,10 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 base_date = dt_util.start_of_local_day() - timedelta(
                     days=target_days_ago
                 )
+
+                target_hours = recent_hours_by_date.get(base_date.date())
+                if not target_hours:
+                    continue
 
                 normal_list = parse_daikin_list(normal_data)
                 cool_list = parse_daikin_list(cool_data)
@@ -350,6 +385,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                         data,
                         base_date,
                         insert_missing=insert_missing,
+                        target_hours=target_hours,
                     )
 
     async def async_sync_total_history(
@@ -385,10 +421,19 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         )
 
         async with self._history_sync_lock:
-            # Keep behavior explicit and predictable:
-            # - days_ago=0 -> sync today only
-            # - days_ago=1 -> sync yesterday, then today
-            days_to_sync = [0] if days_ago == 0 else [0, 1]
+            # Inject only the last 3 completed local hours (skip current + previous).
+            recent_hours_by_date = _recent_completed_hours_by_local_date()
+            today_start = dt_util.start_of_local_day()
+            today_date = today_start.date()
+            yesterday_date = (today_start - timedelta(days=1)).date()
+
+            days_to_sync: list[int] = []
+            if today_date in recent_hours_by_date:
+                days_to_sync.append(0)
+            if yesterday_date in recent_hours_by_date:
+                days_to_sync.append(1)
+            if not days_to_sync:
+                days_to_sync = [0] if days_ago == 0 else [0, 1]
 
             # Ensure extended history values are populated before key lookup.
             if hasattr(self.device, "get_day_power_ex"):
@@ -524,6 +569,10 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                     days=target_days_ago
                 )
 
+                target_hours = recent_hours_by_date.get(base_date.date())
+                if not target_hours:
+                    continue
+
                 total_list = parse_daikin_list(total_data)
                 if not total_list:
                     # Fallback requested: if pydaikin does not expose an
@@ -598,6 +647,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                     total_list,
                     base_date,
                     insert_missing=insert_missing,
+                    target_hours=target_hours,
                 )
 
     async def _import_data_to_stats(
@@ -607,6 +657,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         base_date: datetime,
         *,
         insert_missing: bool = False,
+        target_hours: set[int] | None = None,
     ) -> None:
         """Import a list of hourly energy values into HA statistics.
 
@@ -740,6 +791,9 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             
             if start_time_utc > dt_util.utcnow():
                 break
+
+            if target_hours is not None and hour not in target_hours:
+                continue
 
             if not insert_missing and hour not in existing_hours:
                 skipped_no_row += 1
