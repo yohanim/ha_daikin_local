@@ -72,19 +72,27 @@ _LOGGER = logging.getLogger(__name__)
 type DaikinConfigEntry = ConfigEntry[DaikinCoordinator]
 
 
-def _recent_completed_hours_by_local_date() -> dict[datetime.date, set[int]]:
-    """Hour indices for the last 3 completed local hours (skipping 2).
+def _recent_completed_hours_by_local_date(
+    *,
+    include_extra_hour: bool = False,
+) -> dict[datetime.date, set[int]]:
+    """Hour indices for completed local hours to (re)inject.
 
     We intentionally exclude:
     - the current hour (hour in progress)
     - the previous hour
 
-    So we inject only hours that are at least 2 hours in the past. This
-    reduces “day not compiled yet” warnings near local midnight.
+    By default we inject only hours that are at least 2 hours in the past:
+    hours back {2, 3, 4} (3 completed hours).
+
+    When ``include_extra_hour`` is True, we also include hour back {5}
+    (4 completed hours total). This is useful after temporary Daikin
+    communication failures so we can "catch up" the missing slot later.
     """
     now_local = dt_util.as_local(dt_util.utcnow())
     mapping: dict[datetime.date, set[int]] = {}
-    for k in (2, 3, 4):
+    hours_back = (2, 3, 4) + ((5,) if include_extra_hour else ())
+    for k in hours_back:
         t = now_local - timedelta(hours=k)
         mapping.setdefault(t.date(), set()).add(t.hour)
     return mapping
@@ -150,6 +158,11 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         self._last_update_time = None
         self._last_power = 0
         self._last_history_sync = None
+        # When Daikin communication fails at an hourly boundary, we may miss
+        # one "recent completed hour" worth of statistics injection.
+        # Keep one extra hour in the next history sync attempt.
+        self._history_backfill_extra_hour = False
+        self._comm_error_retry_task: asyncio.Task | None = None
         # Prevent concurrent history imports into recorder statistics.
         self._history_sync_lock = asyncio.Lock()
 
@@ -163,6 +176,23 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 if hasattr(self.device, "get_day_power_ex"):
                     await self.device.get_day_power_ex()
         except Exception as err:
+            now = dt_util.utcnow()
+            # If we're missing an hourly history sync opportunity, plan a retry.
+            if self.config_entry.options.get(CONF_AUTO_HISTORY_SYNC, False):
+                should_have_synced = (
+                    self._last_history_sync is None
+                    or now - self._last_history_sync > timedelta(hours=1)
+                )
+                if should_have_synced:
+                    self._history_backfill_extra_hour = True
+                    if (
+                        self._comm_error_retry_task is None
+                        or self._comm_error_retry_task.done()
+                    ):
+                        self._comm_error_retry_task = self.hass.async_create_task(
+                            self._async_retry_daikin_and_history()
+                        )
+
             raise UpdateFailed(
                 f"Error communicating with Daikin {self.name}: {err}"
             ) from err
@@ -210,6 +240,35 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             today_heat_energy=today_heat,
         )
 
+    async def _async_retry_daikin_and_history(self) -> None:
+        """Retry Daikin fetch + history injection a few minutes later.
+
+        This helps when pydaikin errors during async TaskGroup updates
+        temporarily prevent both the normal refresh and the hourly correction.
+        """
+        await asyncio.sleep(180)
+
+        # Trigger a refresh so device.values are up to date when possible.
+        try:
+            self.async_request_refresh()
+        except Exception:
+            # Best effort only.
+            pass
+
+        # Give the coordinator a moment to complete the refresh.
+        await asyncio.sleep(5)
+
+        if not self.config_entry.options.get(CONF_AUTO_HISTORY_SYNC, False):
+            return
+
+        # Avoid double-scheduling from the periodic sync logic while we
+        # are injecting right now.
+        self._last_history_sync = dt_util.utcnow()
+        try:
+            await self.async_sync_history(days_ago=0, insert_missing=None)
+        except Exception as err:
+            _LOGGER.debug("Delayed history retry failed: %s", err)
+
     def _get_sum_from_daikin_key(self, daikin_key: str) -> float:
         """Calculate sum from a Daikin historical data key."""
         raw_data = self.device.values.get(daikin_key, [])
@@ -254,12 +313,15 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             # Inject only the last 3 completed local hours (skip current + previous).
             # This avoids trying to correct hours/whole days that the recorder has
             # not compiled yet (common right after local midnight).
-            recent_hours_by_date = _recent_completed_hours_by_local_date()
+            recent_hours_by_date = _recent_completed_hours_by_local_date(
+                include_extra_hour=self._history_backfill_extra_hour
+            )
             today_start = dt_util.start_of_local_day()
             today_date = today_start.date()
             yesterday_date = (today_start - timedelta(days=1)).date()
 
             days_to_sync: list[int] = []
+            did_import_any = False
             if today_date in recent_hours_by_date:
                 days_to_sync.append(0)
             if yesterday_date in recent_hours_by_date:
@@ -380,13 +442,19 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                         continue
 
                     _LOGGER.debug("Found entity_id %s for %s", entity_id, key)
-                    await self._import_data_to_stats(
-                        entity_id,
-                        data,
-                        base_date,
-                        insert_missing=insert_missing,
-                        target_hours=target_hours,
+                    did_import_any = (
+                        await self._import_data_to_stats(
+                            entity_id,
+                            data,
+                            base_date,
+                            insert_missing=insert_missing,
+                            target_hours=target_hours,
+                        )
+                        or did_import_any
                     )
+
+            if did_import_any:
+                self._history_backfill_extra_hour = False
 
     async def async_sync_total_history(
         self,
@@ -422,12 +490,15 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
         async with self._history_sync_lock:
             # Inject only the last 3 completed local hours (skip current + previous).
-            recent_hours_by_date = _recent_completed_hours_by_local_date()
+            recent_hours_by_date = _recent_completed_hours_by_local_date(
+                include_extra_hour=self._history_backfill_extra_hour
+            )
             today_start = dt_util.start_of_local_day()
             today_date = today_start.date()
             yesterday_date = (today_start - timedelta(days=1)).date()
 
             days_to_sync: list[int] = []
+            did_import_any = False
             if today_date in recent_hours_by_date:
                 days_to_sync.append(0)
             if yesterday_date in recent_hours_by_date:
@@ -642,13 +713,19 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 if target_entity_id and entity_id != target_entity_id:
                     continue
 
-                await self._import_data_to_stats(
-                    entity_id,
-                    total_list,
-                    base_date,
-                    insert_missing=insert_missing,
-                    target_hours=target_hours,
+                did_import_any = (
+                    await self._import_data_to_stats(
+                        entity_id,
+                        total_list,
+                        base_date,
+                        insert_missing=insert_missing,
+                        target_hours=target_hours,
+                    )
+                    or did_import_any
                 )
+
+            if did_import_any:
+                self._history_backfill_extra_hour = False
 
     async def _import_data_to_stats(
         self,
@@ -658,7 +735,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         *,
         insert_missing: bool = False,
         target_hours: set[int] | None = None,
-    ) -> None:
+    ) -> bool:
         """Import a list of hourly energy values into HA statistics.
 
         For HA energy/consumption aggregation (`state_class=total_increasing`),
@@ -680,7 +757,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 "Statistics import skipped: %s is not in the entity registry",
                 entity_id,
             )
-            return
+            return False
         if reg_entry.config_entry_id != self.config_entry.entry_id:
             _LOGGER.error(
                 "Refusing statistics import for %s: not owned by this device entry "
@@ -689,14 +766,14 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 self.config_entry.entry_id,
                 reg_entry.config_entry_id,
             )
-            return
+            return False
         if reg_entry.platform != DOMAIN:
             _LOGGER.error(
                 "Refusing statistics import for %s: wrong platform (%s)",
                 entity_id,
                 reg_entry.platform,
             )
-            return
+            return False
 
         def _hour_index_local_day(row_start: datetime, day_start: datetime) -> int | None:
             """Hour index 0..23 for row within the local calendar day of day_start."""
@@ -811,6 +888,8 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 )
             )
 
+        did_import = False
+
         if statistics:
             _LOGGER.debug(
                 "Importing %s hourly data points for %s on %s (starting sum: %s, "
@@ -823,6 +902,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 skipped_no_row,
             )
             async_import_statistics(self.hass, metadata, statistics)
+            did_import = True
         elif not insert_missing and not statistics and skipped_no_row:
             _LOGGER.warning(
                 "Statistics import for %s on %s produced no updates (no existing "
@@ -832,3 +912,5 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 entity_id,
                 base_date.date(),
             )
+
+        return did_import
