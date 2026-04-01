@@ -158,17 +158,31 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         self._last_update_time = None
         self._last_power = 0
         self._last_history_sync = None
+        self._consecutive_poll_failures = 0
+        self._poll_cooldown_until: datetime | None = None
         # When Daikin communication fails at an hourly boundary, we may miss
         # one "recent completed hour" worth of statistics injection.
         # Keep one extra hour in the next history sync attempt.
         self._history_backfill_extra_hour = False
-        self._comm_error_retry_task: asyncio.Task | None = None
         # Prevent concurrent history imports into recorder statistics.
         self._history_sync_lock = asyncio.Lock()
 
     async def _async_update_data(self) -> DaikinData:
         """Update data."""
         timeout = _poll_timeout_sec(self.config_entry)
+        now = dt_util.utcnow()
+
+        # If we've recently hit a transient communication error, avoid hammering
+        # the device (and spamming logs). Return cached data during cooldown.
+        if self._poll_cooldown_until is not None and now < self._poll_cooldown_until:
+            if self.data is not None:
+                _LOGGER.debug(
+                    "[poll] Skipping update for %s during cooldown until %s",
+                    self.name,
+                    self._poll_cooldown_until,
+                )
+                return self.data
+
         try:
             async with asyncio.timeout(timeout):
                 await self.device.update_status()
@@ -176,29 +190,36 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 if hasattr(self.device, "get_day_power_ex"):
                     await self.device.get_day_power_ex()
         except Exception as err:
-            now = dt_util.utcnow()
-            # If we're missing an hourly history sync opportunity, plan a retry.
-            if self.config_entry.options.get(CONF_AUTO_HISTORY_SYNC, False):
-                should_have_synced = (
-                    self._last_history_sync is None
-                    or now - self._last_history_sync > timedelta(hours=1)
-                )
-                if should_have_synced:
-                    self._history_backfill_extra_hour = True
-                    if (
-                        self._comm_error_retry_task is None
-                        or self._comm_error_retry_task.done()
-                    ):
-                        self._comm_error_retry_task = self.hass.async_create_task(
-                            self._async_retry_daikin_and_history()
-                        )
+            self._consecutive_poll_failures += 1
+            # No explicit retry is scheduled here: polling already runs frequently.
 
+            # For frequent polling, treat transient failures as "best effort":
+            # - during the first few consecutive failures, return cached data
+            #   and log at debug/info instead of raising UpdateFailed (which
+            #   triggers the noisy "Error fetching X data" log).
+            # - if failures persist, raise UpdateFailed to surface the issue.
+            cooldown_s = min(300, 30 * self._consecutive_poll_failures)
+            self._poll_cooldown_until = now + timedelta(seconds=cooldown_s)
+
+            if self.data is not None and self._consecutive_poll_failures <= 3:
+                _LOGGER.info(
+                    "[poll] Transient communication error for %s (%s); "
+                    "serving cached data, cooldown=%ss (failure #%s)",
+                    self.name,
+                    err,
+                    cooldown_s,
+                    self._consecutive_poll_failures,
+                )
+                return self.data
+
+            # Escalate: persistent comm failures.
             raise UpdateFailed(
-                f"Error communicating with Daikin {self.name}: {err}"
+                f"[poll] Error communicating with Daikin {self.name}: {err}"
             ) from err
 
         # Energy smoothing logic
-        now = dt_util.utcnow()
+        self._consecutive_poll_failures = 0
+        self._poll_cooldown_until = None
         current_power = getattr(self.device, "current_total_power_consumption", 0) or 0
         
         # Use property for smoothing if available, fallback to history sum
@@ -228,7 +249,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 or now - self._last_history_sync > timedelta(hours=1)
             ):
                 self.hass.async_create_task(
-                    self.async_sync_history(days_ago=0, insert_missing=None)
+                    self._async_history_sync_auto_task()
                 )
                 self._last_history_sync = now
 
@@ -240,34 +261,22 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             today_heat_energy=today_heat,
         )
 
-    async def _async_retry_daikin_and_history(self) -> None:
-        """Retry Daikin fetch + history injection a few minutes later.
+    async def _async_history_sync_auto_task(self) -> None:
+        """Run hourly history sync and capture failures.
 
-        This helps when pydaikin errors during async TaskGroup updates
-        temporarily prevent both the normal refresh and the hourly correction.
+        We don't want uncaught exceptions from background tasks, and we want
+        failures here (history correction path) to enable a one-hour wider
+        window on the next run.
         """
-        await asyncio.sleep(180)
-
-        # Trigger a refresh so device.values are up to date when possible.
-        try:
-            self.async_request_refresh()
-        except Exception:
-            # Best effort only.
-            pass
-
-        # Give the coordinator a moment to complete the refresh.
-        await asyncio.sleep(5)
-
-        if not self.config_entry.options.get(CONF_AUTO_HISTORY_SYNC, False):
-            return
-
-        # Avoid double-scheduling from the periodic sync logic while we
-        # are injecting right now.
-        self._last_history_sync = dt_util.utcnow()
         try:
             await self.async_sync_history(days_ago=0, insert_missing=None)
         except Exception as err:
-            _LOGGER.debug("Delayed history retry failed: %s", err)
+            self._history_backfill_extra_hour = True
+            _LOGGER.warning(
+                "[history] Auto history sync failed for %s: %s (will widen by 1 hour next run)",
+                self.name,
+                err,
+            )
 
     def _get_sum_from_daikin_key(self, daikin_key: str) -> float:
         """Calculate sum from a Daikin historical data key."""
@@ -304,7 +313,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             return
 
         _LOGGER.info(
-            "Syncing energy history for %s (days_ago=%s)",
+            "[history] Syncing energy history for %s (days_ago=%s)",
             self.name,
             days_ago,
         )
@@ -338,7 +347,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                     await self.device.get_day_power_ex()
                 except Exception as err:
                     _LOGGER.warning(
-                        "Failed to fetch extended power data for %s: %s",
+                        "[history] Failed to fetch extended power data for %s: %s",
                         self.name,
                         err,
                     )
