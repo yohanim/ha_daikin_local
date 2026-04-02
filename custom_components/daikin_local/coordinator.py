@@ -22,6 +22,8 @@ from .const import (
     ATTR_HEAT_ENERGY,
     ATTR_TOTAL_ENERGY_TODAY,
     CONF_AUTO_HISTORY_SYNC,
+    CONF_HISTORY_HOURS_TO_CORRECT,
+    CONF_HISTORY_SKIP_EXTRA_HOURS,
     CONF_INSERT_MISSING,
     DOMAIN,
     TIMEOUT_SEC,
@@ -75,6 +77,8 @@ type DaikinConfigEntry = ConfigEntry[DaikinCoordinator]
 def _recent_completed_hours_by_local_date(
     *,
     include_extra_hour: bool = False,
+    skip_hours: int = 2,
+    hours_to_correct: int = 3,
 ) -> dict[datetime.date, set[int]]:
     """Hour indices for completed local hours to (re)inject.
 
@@ -82,20 +86,41 @@ def _recent_completed_hours_by_local_date(
     - the current hour (hour in progress)
     - the previous hour
 
-    By default we inject only hours that are at least 2 hours in the past:
-    hours back {2, 3, 4} (3 completed hours).
+    ``skip_hours``: number of most recent hours to skip counting backwards from
+    "now" and including the current hour. Default 2 = skip current+previous hour.
 
-    When ``include_extra_hour`` is True, we also include hour back {5}
-    (4 completed hours total). This is useful after temporary Daikin
-    communication failures so we can "catch up" the missing slot later.
+    ``hours_to_correct``: number of hourly slots to correct immediately before the
+    skipped range. Default 3 with skip_hours=2 targets hours back {2,3,4}.
+
+    When ``include_extra_hour`` is True, we correct one additional hour (i.e.
+    ``hours_to_correct + 1``). This is used after a history-sync failure so we
+    can "catch up" one missed slot later.
     """
+    skip_hours = max(1, int(skip_hours))
+    hours_to_correct = max(1, int(hours_to_correct))
+
     now_local = dt_util.as_local(dt_util.utcnow())
     mapping: dict[datetime.date, set[int]] = {}
-    hours_back = (2, 3, 4) + ((5,) if include_extra_hour else ())
-    for k in hours_back:
-        t = now_local - timedelta(hours=k)
+    extra = 1 if include_extra_hour else 0
+    for i in range(hours_to_correct + extra):
+        t = now_local - timedelta(hours=skip_hours + i)
         mapping.setdefault(t.date(), set()).add(t.hour)
     return mapping
+
+
+def _history_skip_hours_from_options(options: dict) -> int:
+    """Compute total hours to skip (includes current hour).
+
+    New option: history_skip_extra_hours (extra hours besides current hour).
+    Legacy option (kept for backward compat): history_skip_hours (included current hour).
+    """
+    if CONF_HISTORY_SKIP_EXTRA_HOURS in options:
+        extra = int(options.get(CONF_HISTORY_SKIP_EXTRA_HOURS) or 0)
+        return max(1, 1 + extra)
+
+    # Backward compat: old meaning was total skip including current hour.
+    legacy_total = int(options.get("history_skip_hours") or 2)
+    return max(1, legacy_total)
 
 
 def _lts_row_start_to_datetime(
@@ -185,9 +210,11 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
         try:
             async with asyncio.timeout(timeout):
+                _LOGGER.debug("[poll] Updating %s via pydaikin update_status()", self.name)
                 await self.device.update_status()
                 # Fetch extended energy if possible during regular update
                 if hasattr(self.device, "get_day_power_ex"):
+                    _LOGGER.debug("[poll] Updating %s via pydaikin get_day_power_ex()", self.name)
                     await self.device.get_day_power_ex()
         except Exception as err:
             self._consecutive_poll_failures += 1
@@ -319,11 +346,17 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         )
 
         async with self._history_sync_lock:
+            skip_hours = _history_skip_hours_from_options(self.config_entry.options)
+            hours_to_correct = int(
+                self.config_entry.options.get(CONF_HISTORY_HOURS_TO_CORRECT, 3)
+            )
             # Inject only the last 3 completed local hours (skip current + previous).
             # This avoids trying to correct hours/whole days that the recorder has
             # not compiled yet (common right after local midnight).
             recent_hours_by_date = _recent_completed_hours_by_local_date(
-                include_extra_hour=self._history_backfill_extra_hour
+                include_extra_hour=self._history_backfill_extra_hour,
+                skip_hours=skip_hours,
+                hours_to_correct=hours_to_correct,
             )
             today_start = dt_util.start_of_local_day()
             today_date = today_start.date()
@@ -344,6 +377,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             if hasattr(self.device, "get_day_power_ex"):
                 _LOGGER.debug("Fetching extended day power data for %s", self.name)
                 try:
+                    _LOGGER.debug("[history] Updating %s via pydaikin get_day_power_ex()", self.name)
                     await self.device.get_day_power_ex()
                 except Exception as err:
                     _LOGGER.warning(
@@ -498,9 +532,15 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         )
 
         async with self._history_sync_lock:
+            skip_hours = _history_skip_hours_from_options(self.config_entry.options)
+            hours_to_correct = int(
+                self.config_entry.options.get(CONF_HISTORY_HOURS_TO_CORRECT, 3)
+            )
             # Inject only the last 3 completed local hours (skip current + previous).
             recent_hours_by_date = _recent_completed_hours_by_local_date(
-                include_extra_hour=self._history_backfill_extra_hour
+                include_extra_hour=self._history_backfill_extra_hour,
+                skip_hours=skip_hours,
+                hours_to_correct=hours_to_correct,
             )
             today_start = dt_util.start_of_local_day()
             today_date = today_start.date()

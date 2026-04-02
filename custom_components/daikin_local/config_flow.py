@@ -27,6 +27,8 @@ from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
 from .const import (
     CONF_AUTO_HISTORY_SYNC,
+    CONF_HISTORY_HOURS_TO_CORRECT,
+    CONF_HISTORY_SKIP_EXTRA_HOURS,
     CONF_INSERT_MISSING,
     CONF_TIMEOUT,
     DOMAIN,
@@ -40,7 +42,7 @@ _LOGGER = logging.getLogger(__name__)
 class FlowHandler(ConfigFlow, domain=DOMAIN):
     """Handle a config flow."""
 
-    VERSION = 2
+    VERSION = 3
 
     def __init__(self) -> None:
         """Initialize the Daikin config flow."""
@@ -229,6 +231,12 @@ class OptionsFlowHandler(OptionsFlow):
             CONF_INSERT_MISSING: self.config_entry.options.get(
                 CONF_INSERT_MISSING, False
             ),
+            CONF_HISTORY_SKIP_EXTRA_HOURS: self.config_entry.options.get(
+                CONF_HISTORY_SKIP_EXTRA_HOURS, 1
+            ),
+            CONF_HISTORY_HOURS_TO_CORRECT: self.config_entry.options.get(
+                CONF_HISTORY_HOURS_TO_CORRECT, 3
+            ),
         }
         return self.async_show_form(
             step_id="init",
@@ -238,6 +246,12 @@ class OptionsFlowHandler(OptionsFlow):
                         vol.Optional(CONF_TIMEOUT, default=TIMEOUT_SEC): int,
                         vol.Optional(CONF_AUTO_HISTORY_SYNC, default=False): cv.boolean,
                         vol.Optional(CONF_INSERT_MISSING, default=False): cv.boolean,
+                        vol.Optional(CONF_HISTORY_SKIP_EXTRA_HOURS, default=1): vol.All(
+                            vol.Coerce(int), vol.Range(min=0, max=12)
+                        ),
+                        vol.Optional(
+                            CONF_HISTORY_HOURS_TO_CORRECT, default=3
+                        ): vol.All(vol.Coerce(int), vol.Range(min=1, max=24)),
                     }
                 ),
                 suggested,

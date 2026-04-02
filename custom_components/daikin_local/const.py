@@ -29,6 +29,14 @@ CONF_AUTO_HISTORY_SYNC = "auto_history_sync"
 # When True, history sync may INSERT missing hourly LTS rows (can conflict with recorder).
 CONF_INSERT_MISSING = "insert_missing"
 
+# History correction window:
+# - skip_extra_hours: number of *additional* most recent local hours to ignore,
+#   besides the current hour which is always skipped.
+#   Example: 1 = skip current hour + 1 previous hour (effectively skip 2 hours).
+# - hours_to_correct: number of hours to attempt correction for, right before the skipped range.
+CONF_HISTORY_SKIP_EXTRA_HOURS = "history_skip_extra_hours"
+CONF_HISTORY_HOURS_TO_CORRECT = "history_hours_to_correct"
+
 ZONE_NAME_UNCONFIGURED = "-"
 
 TIMEOUT_SEC = 30

@@ -17,7 +17,7 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 
-from .const import KEY_MAC, TIMEOUT_SEC, DOMAIN
+from .const import KEY_MAC, TIMEOUT_SEC, DOMAIN, CONF_HISTORY_SKIP_EXTRA_HOURS
 from .coordinator import DaikinConfigEntry, DaikinCoordinator
 from .services import async_setup_services
 
@@ -27,14 +27,38 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [Platform.CLIMATE, Platform.SENSOR, Platform.SWITCH]
 
 _OBSOLETE_CONFIG_KEYS = frozenset({"api_key", "password", "uuid"})
+_LEGACY_OPTION_SKIP_HOURS = "history_skip_hours"
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Migrate config entries from v1 to v2 (matches config_flow FlowHandler.VERSION)."""
-    if entry.version > 1:
+    """Migrate config entries (matches config_flow FlowHandler.VERSION)."""
+    # v1 -> v2: drop legacy credential keys from entry.data
+    if entry.version == 1:
+        new_data = {
+            k: v for k, v in entry.data.items() if k not in _OBSOLETE_CONFIG_KEYS
+        }
+        hass.config_entries.async_update_entry(entry, data=new_data, version=2)
         return True
-    new_data = {k: v for k, v in entry.data.items() if k not in _OBSOLETE_CONFIG_KEYS}
-    hass.config_entries.async_update_entry(entry, data=new_data, version=2)
+
+    # v2 -> v3: rename history window option to "extra hours" semantics
+    if entry.version == 2:
+        options = dict(entry.options)
+        if (
+            _LEGACY_OPTION_SKIP_HOURS in options
+            and CONF_HISTORY_SKIP_EXTRA_HOURS not in options
+        ):
+            try:
+                legacy_total = int(options.get(_LEGACY_OPTION_SKIP_HOURS) or 2)
+            except (TypeError, ValueError):
+                legacy_total = 2
+            # legacy_total included the current hour; new option counts only extra.
+            extra = max(0, legacy_total - 1)
+            options.pop(_LEGACY_OPTION_SKIP_HOURS, None)
+            options[CONF_HISTORY_SKIP_EXTRA_HOURS] = extra
+
+        hass.config_entries.async_update_entry(entry, options=options, version=3)
+        return True
+
     return True
 
 

@@ -31,7 +31,9 @@
         "data": {
           "timeout": "Intervalle de rafraîchissement (secondes)",
           "auto_history_sync": "Synchronisation automatique horaire des stats d'énergie (recorder)",
-          "insert_missing": "Autoriser l'insertion des créneaux horaires manquants (stats)"
+          "insert_missing": "Autoriser l'insertion des créneaux horaires manquants (stats)",
+          "history_skip_extra_hours": "Heures supplémentaires à ignorer (l'heure en cours est toujours ignorée)",
+          "history_hours_to_correct": "Nombre d'heures précédentes à corriger"
         },
         "description": "L'intervalle de rafraîchissement ici remplace celui défini à l'ajout si renseigné. La synchro auto injecte des statistiques chaque heure (charge sur le recorder). « Insertion manquants » : lors des corrections d'historique, autoriser la création de lignes pour les heures sans donnée (rare conflit avec le recorder ; les actions peuvent surcharger).",
         "title": "Options Daikin"

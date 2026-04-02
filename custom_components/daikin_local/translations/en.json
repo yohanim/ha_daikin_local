@@ -31,7 +31,9 @@
         "data": {
           "timeout": "Polling interval (seconds)",
           "auto_history_sync": "Hourly auto-sync of energy statistics to the recorder",
-          "insert_missing": "Allow inserting missing hourly statistics rows"
+          "insert_missing": "Allow inserting missing hourly statistics rows",
+          "history_skip_extra_hours": "Additional hours to skip (current hour is always skipped)",
+          "history_hours_to_correct": "Number of previous hours to correct"
         },
         "description": "Polling interval overrides the value from initial setup when set. Auto history sync injects LTS every hour (heavy on the recorder). Insert missing: when correcting history, allow creating LTS rows for hours that do not exist yet (may rarely conflict with the recorder; services can override per call).",
         "title": "Daikin AC options"
