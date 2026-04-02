@@ -59,6 +59,13 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.config_entries.async_update_entry(entry, options=options, version=3)
         return True
 
+    # v3 -> v4: remove obsolete history_sync_minutes_after_hour (auto history uses polling only)
+    if entry.version == 3:
+        options = dict(entry.options)
+        options.pop("history_sync_minutes_after_hour", None)
+        hass.config_entries.async_update_entry(entry, options=options, version=4)
+        return True
+
     return True
 
 

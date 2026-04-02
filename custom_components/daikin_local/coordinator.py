@@ -182,7 +182,11 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         self._integrated_total_energy = 0
         self._last_update_time = None
         self._last_power = 0
-        self._last_history_sync = None
+        # Local calendar hour for auto history: (year, month, day, hour).
+        self._auto_history_local_slot: tuple[int, int, int, int] | None = None
+        # True once LTS auto-sync succeeded for the current slot (new hour resets).
+        self._auto_history_synced_ok: bool = False
+        self._prev_auto_history_enabled: bool = False
         self._consecutive_poll_failures = 0
         self._poll_cooldown_until: datetime | None = None
         # When Daikin communication fails at an hourly boundary, we may miss
@@ -191,6 +195,68 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         self._history_backfill_extra_hour = False
         # Prevent concurrent history imports into recorder statistics.
         self._history_sync_lock = asyncio.Lock()
+
+    async def _async_maybe_auto_history_sync(self) -> None:
+        """After a successful poll, optionally correct LTS (same schedule as polling).
+
+        At most one successful sync per local clock hour; retries on later polls if needed.
+        Failures here do not fail the coordinator update (sensor data already refreshed).
+        """
+        enabled = self.config_entry.options.get(CONF_AUTO_HISTORY_SYNC, False)
+        if not enabled:
+            self._prev_auto_history_enabled = False
+            return
+        if not self._prev_auto_history_enabled:
+            self._prev_auto_history_enabled = True
+            self._auto_history_synced_ok = False
+
+        now_local = dt_util.as_local(dt_util.utcnow())
+        slot = (now_local.year, now_local.month, now_local.day, now_local.hour)
+        if self._auto_history_local_slot != slot:
+            self._auto_history_local_slot = slot
+            self._auto_history_synced_ok = False
+
+        if self._auto_history_synced_ok:
+            return
+
+        if hasattr(self.device, "get_day_power_ex"):
+            try:
+                _LOGGER.debug(
+                    "[history] Auto: get_day_power_ex() after poll for %s", self.name
+                )
+                await self.device.get_day_power_ex()
+            except Exception as err:
+                _LOGGER.warning(
+                    "[history] get_day_power_ex failed for %s: %s "
+                    "(sensors already updated; will retry LTS on next poll)",
+                    self.name,
+                    err,
+                )
+
+        try:
+            ran = await self.async_sync_history(
+                days_ago=0,
+                insert_missing=None,
+                prefetch_day_power=False,
+            )
+        except Exception as err:
+            self._history_backfill_extra_hour = True
+            _LOGGER.warning(
+                "[history] Auto history sync failed for %s: %s "
+                "(will retry on next poll)",
+                self.name,
+                err,
+            )
+            return
+
+        if ran:
+            self._auto_history_synced_ok = True
+        else:
+            _LOGGER.debug(
+                "[history] Auto history sync skipped (recorder not ready) for %s; "
+                "will retry on next poll",
+                self.name,
+            )
 
     async def _async_update_data(self) -> DaikinData:
         """Update data."""
@@ -212,10 +278,6 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             async with asyncio.timeout(timeout):
                 _LOGGER.debug("[poll] Updating %s via pydaikin update_status()", self.name)
                 await self.device.update_status()
-                # Fetch extended energy if possible during regular update
-                if hasattr(self.device, "get_day_power_ex"):
-                    _LOGGER.debug("[poll] Updating %s via pydaikin get_day_power_ex()", self.name)
-                    await self.device.get_day_power_ex()
         except Exception as err:
             self._consecutive_poll_failures += 1
             # No explicit retry is scheduled here: polling already runs frequently.
@@ -267,43 +329,15 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         self._last_update_time = now
         self._last_power = current_power
 
-        # Optional periodic history sync (every hour) — OFF by default.
-        # Injecting LTS is heavy on the recorder; enable only if you want
-        # automatic backfill without calling services manually.
-        if self.config_entry.options.get(CONF_AUTO_HISTORY_SYNC, False):
-            if (
-                self._last_history_sync is None
-                or now - self._last_history_sync > timedelta(hours=1)
-            ):
-                self.hass.async_create_task(
-                    self._async_history_sync_auto_task()
-                )
-                self._last_history_sync = now
-
-        return DaikinData(
+        data = DaikinData(
             appliance=self.device,
             calculated_total_energy_today=real_total_energy_today,
             today_energy=real_total_energy_today,
             today_cool_energy=today_cool,
             today_heat_energy=today_heat,
         )
-
-    async def _async_history_sync_auto_task(self) -> None:
-        """Run hourly history sync and capture failures.
-
-        We don't want uncaught exceptions from background tasks, and we want
-        failures here (history correction path) to enable a one-hour wider
-        window on the next run.
-        """
-        try:
-            await self.async_sync_history(days_ago=0, insert_missing=None)
-        except Exception as err:
-            self._history_backfill_extra_hour = True
-            _LOGGER.warning(
-                "[history] Auto history sync failed for %s: %s (will widen by 1 hour next run)",
-                self.name,
-                err,
-            )
+        await self._async_maybe_auto_history_sync()
+        return data
 
     def _get_sum_from_daikin_key(self, daikin_key: str) -> float:
         """Calculate sum from a Daikin historical data key."""
@@ -317,7 +351,8 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         target_entity_id: str | None = None,
         *,
         insert_missing: bool | None = None,
-    ) -> None:
+        prefetch_day_power: bool = True,
+    ) -> bool:
         """Sync energy history with Daikin historical data.
 
         Only sensors owned by this config entry are ever passed to the recorder.
@@ -327,6 +362,13 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         ``insert_missing``: None = use integration option ``insert_missing``;
         False = only update hours that already have LTS rows; True = may insert
         missing hours (risk of recorder UNIQUE conflicts).
+
+        ``prefetch_day_power``: When True (default), call ``get_day_power_ex()`` once
+        before reading hourly arrays. Set False when the caller already fetched
+        extended power (e.g. auto-sync from the poll path) to avoid a second call.
+
+        Returns True if the sync ran (recorder API available and lock acquired);
+        False if recorder statistics are unavailable.
         """
         if insert_missing is None:
             insert_missing = self.config_entry.options.get(CONF_INSERT_MISSING, False)
@@ -337,7 +379,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                     "Recorder statistics injection unavailable; energy history sync is disabled"
                 )
                 self.hass.data[key] = True
-            return
+            return False
 
         _LOGGER.info(
             "[history] Syncing energy history for %s (days_ago=%s)",
@@ -373,8 +415,8 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 # we couldn't compute the target day offsets.
                 days_to_sync = [0] if days_ago == 0 else [0, 1]
 
-            # Attempt to fetch historical data explicitly if pydaikin supports it
-            if hasattr(self.device, "get_day_power_ex"):
+            # Optional: one pydaikin extended fetch (skipped when caller prefetched).
+            if prefetch_day_power and hasattr(self.device, "get_day_power_ex"):
                 _LOGGER.debug("Fetching extended day power data for %s", self.name)
                 try:
                     _LOGGER.debug("[history] Updating %s via pydaikin get_day_power_ex()", self.name)
@@ -499,12 +541,15 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             if did_import_any:
                 self._history_backfill_extra_hour = False
 
+        return True
+
     async def async_sync_total_history(
         self,
         days_ago: int = 0,
         target_entity_id: str | None = None,
         *,
         insert_missing: bool | None = None,
+        prefetch_day_power: bool = True,
     ) -> None:
         """Sync *only* the smoothed total/compressor energy history.
 
@@ -555,13 +600,16 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             if not days_to_sync:
                 days_to_sync = [0] if days_ago == 0 else [0, 1]
 
-            # Ensure extended history values are populated before key lookup.
-            if hasattr(self.device, "get_day_power_ex"):
+            # Optional extended fetch (services default to prefetch=True).
+            if prefetch_day_power and hasattr(self.device, "get_day_power_ex"):
                 try:
+                    _LOGGER.debug(
+                        "[history] Total sync: get_day_power_ex() for %s", self.name
+                    )
                     await self.device.get_day_power_ex()
                 except Exception as err:
                     _LOGGER.warning(
-                        "Failed to fetch extended power data for %s: %s",
+                        "[history] Failed to fetch extended power data for %s: %s",
                         self.name,
                         err,
                     )

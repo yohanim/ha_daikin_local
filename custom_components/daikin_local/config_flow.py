@@ -22,6 +22,7 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_HOST
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
@@ -42,7 +43,7 @@ _LOGGER = logging.getLogger(__name__)
 class FlowHandler(ConfigFlow, domain=DOMAIN):
     """Handle a config flow."""
 
-    VERSION = 3
+    VERSION = 4
 
     def __init__(self) -> None:
         """Initialize the Daikin config flow."""
@@ -246,12 +247,30 @@ class OptionsFlowHandler(OptionsFlow):
                         vol.Optional(CONF_TIMEOUT, default=TIMEOUT_SEC): int,
                         vol.Optional(CONF_AUTO_HISTORY_SYNC, default=False): cv.boolean,
                         vol.Optional(CONF_INSERT_MISSING, default=False): cv.boolean,
-                        vol.Optional(CONF_HISTORY_SKIP_EXTRA_HOURS, default=1): vol.All(
-                            vol.Coerce(int), vol.Range(min=0, max=12)
+                        vol.Optional(
+                            CONF_HISTORY_SKIP_EXTRA_HOURS,
+                            default=1,
+                        ): selector.NumberSelector(
+                            {
+                                "min": 1,
+                                "max": 12,
+                                "step": 1,
+                                "mode": "slider",
+                                "unit_of_measurement": "h",
+                            }
                         ),
                         vol.Optional(
-                            CONF_HISTORY_HOURS_TO_CORRECT, default=3
-                        ): vol.All(vol.Coerce(int), vol.Range(min=1, max=24)),
+                            CONF_HISTORY_HOURS_TO_CORRECT,
+                            default=3,
+                        ): selector.NumberSelector(
+                            {
+                                "min": 1,
+                                "max": 24,
+                                "step": 1,
+                                "mode": "slider",
+                                "unit_of_measurement": "h",
+                            }
+                        ),
                     }
                 ),
                 suggested,

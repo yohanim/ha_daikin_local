@@ -35,7 +35,7 @@
           "history_skip_extra_hours": "Heures supplémentaires à ignorer (l'heure en cours est toujours ignorée)",
           "history_hours_to_correct": "Nombre d'heures précédentes à corriger"
         },
-        "description": "L'intervalle de rafraîchissement ici remplace celui défini à l'ajout si renseigné. La synchro auto injecte des statistiques chaque heure (charge sur le recorder). « Insertion manquants » : lors des corrections d'historique, autoriser la création de lignes pour les heures sans donnée (rare conflit avec le recorder ; les actions peuvent surcharger).",
+        "description": "L'intervalle de rafraîchissement ici remplace celui défini à l'ajout si renseigné. La synchro auto d'historique utilise le même rythme que le polling : après chaque lecture réussie des capteurs, une correction LTS est tentée au plus une fois par heure locale (nouvelle tentative au poll suivant si elle échoue). « Insertion manquants » : lors des corrections d'historique, autoriser la création de lignes pour les heures sans donnée (rare conflit avec le recorder ; les actions peuvent surcharger).",
         "title": "Options Daikin"
       }
     }
