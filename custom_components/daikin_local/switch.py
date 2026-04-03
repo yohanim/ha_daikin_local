@@ -11,7 +11,6 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .const import ZONE_NAME_UNCONFIGURED
 from .coordinator import DaikinConfigEntry, DaikinCoordinator
 from .entity import DaikinEntity
-from .utils import device_object_id_prefix
 
 DAIKIN_ATTR_ADVANCED = "adv"
 DAIKIN_ATTR_STREAMER = "streamer"
@@ -57,8 +56,8 @@ class DaikinZoneSwitch(DaikinEntity, SwitchEntity):
 
     @property
     def suggested_object_id(self) -> str | None:
-        prefix = device_object_id_prefix(self.device.values.get("name"))
-        return f"{prefix}_zone_{self._zone_id}"
+        """Suffix only: HA prepends device slug."""
+        return f"zone_{self._zone_id}"
 
     @property
     def is_on(self) -> bool:
@@ -90,8 +89,7 @@ class DaikinStreamerSwitch(DaikinEntity, SwitchEntity):
 
     @property
     def suggested_object_id(self) -> str | None:
-        prefix = device_object_id_prefix(self.device.values.get("name"))
-        return f"{prefix}_streamer"
+        return "streamer"
 
     @property
     def is_on(self) -> bool:
@@ -123,8 +121,7 @@ class DaikinToggleSwitch(DaikinEntity, SwitchEntity):
 
     @property
     def suggested_object_id(self) -> str | None:
-        prefix = device_object_id_prefix(self.device.values.get("name"))
-        return f"{prefix}_toggle"
+        return "toggle"
 
     @property
     def is_on(self) -> bool:

@@ -3,15 +3,7 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.util import slugify
-
 _LOGGER = logging.getLogger(__name__)
-
-
-def device_object_id_prefix(device_name: str | None) -> str:
-    """Stable slug prefix for entity object_ids from the appliance display name."""
-    slug = slugify(device_name or "daikin")
-    return slug if slug else "daikin"
 
 
 def parse_daikin_list(raw_data: str | list[int]) -> list[int]:

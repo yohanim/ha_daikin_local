@@ -38,7 +38,6 @@ from .const import (
 )
 from .coordinator import DaikinConfigEntry, DaikinCoordinator
 from .entity import DaikinEntity
-from .utils import device_object_id_prefix
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -379,8 +378,8 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
 
     @property
     def suggested_object_id(self) -> str | None:
-        """One climate entity per appliance: slug from device name."""
-        return device_object_id_prefix(self.device.values.get("name"))
+        """Suffix only: HA prepends device slug (see DaikinSensor.suggested_object_id)."""
+        return "hvac"
 
     async def async_turn_on(self) -> None:
         """Turn device on."""
@@ -412,9 +411,8 @@ class DaikinZoneClimate(DaikinEntity, ClimateEntity):
 
     @property
     def suggested_object_id(self) -> str | None:
-        """Align object_id with unique_id segments (zone / temperature)."""
-        prefix = device_object_id_prefix(self.device.values.get("name"))
-        return f"{prefix}_zone_{self._zone_id}_temperature"
+        """Suffix only: HA prepends device slug."""
+        return f"zone_{self._zone_id}_temperature"
 
     @property
     def hvac_modes(self) -> list[HVACMode]:

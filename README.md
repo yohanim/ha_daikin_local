@@ -12,7 +12,7 @@ A custom integration for Home Assistant to locally control Daikin air conditione
   - **Manual correction**: Services `daikin_local.sync_history` and `daikin_local.sync_total_history` to backfill or fix delayed Daikin data on demand.
 - **Diagnostics**:
   - Per-device **daily error counters** for pydaikin communication: `pydaikin_daily_poll_errors` and `pydaikin_daily_history_errors` (reset at each local day change, disabled by default in the entity registry).
-- **Clear default entity IDs**: For **new** devices and **new** installations, the integration suggests readable `entity_id` values (prefix from the appliance name, suffix from the sensor key), so you get stable names such as `sensor.<room>_energy_consumption` instead of ambiguous `sensor.<room>_energy_2` when possible.
+- **Clear default entity IDs**: For **new** devices and **new** installations, `suggested_object_id` is only the **suffix** (sensor key, `hvac`, `zone_N`, …). Home Assistant then builds `sensor.<device_slug>_<suffix>` (e.g. `sensor.salon_humidity`), so the device name is **not** duplicated in the `entity_id`.
 - **Advanced Functions**: Support for Streamer mode, Powerful (Boost), and Econo modes.
 - **Instant Feedback**: State updates immediately in the UI after any setting change (no more waiting for the 30s refresh cycle).
 
@@ -110,7 +110,7 @@ Correlation in time with running `sync_history` does **not** prove causation: th
 
 ### New devices and new installations
 
-The integration sets a **suggested `entity_id`** when entities are first registered: a slug from the Daikin **device name** plus a stable suffix (sensor key, `zone_N`, `streamer`, etc.). That keeps names predictable and aligned with each entity’s `unique_id` (for example `<mac>-energy_consumption`). Existing entities in the registry are **not** renamed automatically when you upgrade the integration.
+The integration sets **`suggested_object_id`** to a **suffix only** (sensor `key`, `hvac` for the main climate, `zone_N` / `streamer` / `toggle` for switches, etc.). Home Assistant **prepends the device name slug** when registering the entity, so you get ids like `sensor.<room>_humidity`, not `sensor.<room>_<room>_humidity`. The **`unique_id`** remains `<mac>-<key>` and is unchanged. Existing entities in the registry are **not** renamed automatically when you upgrade the integration.
 
 ### Renaming an `entity_id` in Home Assistant (2026.3+)
 
@@ -121,7 +121,7 @@ Use the **official entity settings** so history and long-term statistics stay ti
 3. Click the entity → **⚙️** (settings) or **Edit**.
 4. Expand **Advanced settings** (wording may vary slightly).
 5. Set the **Entity ID**:
-   - **Circular-arrow reset** (next to the Entity ID field): restores Home Assistant’s **suggested** id from this integration. It is derived from the **Daikin device name** (slug) plus a **suffix aligned with `unique_id`**: for sensors, the key after `<mac>-` (e.g. `energy_consumption`); for climate / zone / switch entities, the same stable segments as in code (`zone_N`, `streamer`, `toggle`, zone temperature, etc.). You do not need to type the suffix yourself.
+   - **Circular-arrow reset** (next to the Entity ID field): restores Home Assistant’s **suggested** id. The integration only supplies the **suffix**; Core adds the **device slug** once at the front (see above).
    - **Manual edit**: enter any valid id (lowercase, `domain.name` for sensors, e.g. `sensor.salon_energy_consumption`) if you prefer a custom name.
 6. Save.
 
