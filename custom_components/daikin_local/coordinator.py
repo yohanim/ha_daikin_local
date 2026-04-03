@@ -7,8 +7,6 @@ import logging
 import re
 
 from pydaikin.daikin_base import Appliance
-from pydaikin.daikin_brp069 import DaikinBRP069
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_TIMEOUT, UnitOfEnergy
 from homeassistant.core import HomeAssistant
@@ -22,8 +20,6 @@ from .const import (
     ATTR_ENERGY_TODAY,
     ATTR_HEAT_ENERGY,
     ATTR_TOTAL_ENERGY_TODAY,
-    BRP069_POLL_DAY_POWER_EX,
-    BRP069_POLL_SENSOR_AND_CONTROL,
     CONF_AUTO_HISTORY_SYNC,
     CONF_HISTORY_HOURS_TO_CORRECT,
     CONF_HISTORY_SKIP_EXTRA_HOURS,
@@ -275,21 +271,10 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
         try:
             async with asyncio.timeout(timeout):
-                if isinstance(self.device, DaikinBRP069):
-                    resources = list(BRP069_POLL_SENSOR_AND_CONTROL)
-                    if self.device.support_energy_consumption:
-                        resources.append(BRP069_POLL_DAY_POWER_EX)
-                    _LOGGER.debug(
-                        "[poll] Updating %s via update_status(%s)",
-                        self.name,
-                        resources,
-                    )
-                    await self.device.update_status(resources)
-                else:
-                    _LOGGER.debug(
-                        "[poll] Updating %s via pydaikin update_status()", self.name
-                    )
-                    await self.device.update_status()
+                _LOGGER.debug(
+                    "[poll] Updating %s via pydaikin update_status()", self.name
+                )
+                await self.device.update_status()
         except Exception as err:
             self._ensure_error_stats_date()
             self._daily_polling_error_count += 1

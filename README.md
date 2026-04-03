@@ -15,7 +15,7 @@ A custom integration for Home Assistant to locally control Daikin air conditione
 - **Clear default entity IDs**: For **new** devices and **new** installations, `suggested_object_id` is only the **suffix** (sensor key, `hvac`, `zone_N`, …). Home Assistant then builds `sensor.<device_slug>_<suffix>` (e.g. `sensor.salon_humidity`), so the device name is **not** duplicated in the `entity_id`.
 - **Advanced Functions**: Support for Streamer mode, Powerful (Boost), and Econo modes.
 - **Instant Feedback**: State updates immediately in the UI after any setting change (no more waiting for the 30s refresh cycle).
-- **Fewer BRP069 API calls on poll**: recurring polls call `update_status` with an explicit resource list (sensor + control + `get_day_power_ex` when energy is supported), **without** `aircon/get_week_power` (weekly aggregates are unused here). Other Daikin classes still use pydaikin’s default `get_info_resources()`.
+- **Polling**: recurring updates use pydaikin’s `update_status()` (per device class, e.g. BRP069 with energy uses `get_info_resources()` — sensor, control, day/week power — not the full init resource list, so e.g. year aggregates are not fetched on every poll).
 
 ## 🚀 Installation
 
