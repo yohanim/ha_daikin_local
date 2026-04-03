@@ -137,6 +137,29 @@ SENSOR_TYPES: tuple[DaikinSensorEntityDescription, ...] = (
         entity_registry_enabled_default=False,
         value_func=lambda data: round(data.calculated_total_energy_today, 2),
     ),
+    # Diagnostics: per-day pydaikin communication errors.
+    DaikinSensorEntityDescription(
+        key="daily_pooling_error",
+        translation_key="daily_pooling_error",
+        device_class=None,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=None,
+        entity_registry_enabled_default=False,
+        value_func=lambda data: data.appliance.coordinator.daily_polling_error_count
+        if hasattr(data.appliance, "coordinator")
+        else None,
+    ),
+    DaikinSensorEntityDescription(
+        key="daily_history_error",
+        translation_key="daily_history_error",
+        device_class=None,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=None,
+        entity_registry_enabled_default=False,
+        value_func=lambda data: data.appliance.coordinator.daily_history_poll_error_count
+        if hasattr(data.appliance, "coordinator")
+        else None,
+    ),
 )
 
 
@@ -150,20 +173,29 @@ async def async_setup_entry(
     device = coordinator.device
     
     entities: list[DaikinSensor] = []
-    
+
     for description in SENSOR_TYPES:
         supported = False
         if description.key == ATTR_INSIDE_TEMPERATURE:
             supported = True
         elif description.key == ATTR_OUTSIDE_TEMPERATURE:
             supported = device.support_outside_temperature
-        elif description.key in (ATTR_ENERGY_TODAY, ATTR_COOL_ENERGY, ATTR_HEAT_ENERGY, ATTR_TOTAL_POWER, ATTR_TOTAL_ENERGY_TODAY):
+        elif description.key in (
+            ATTR_ENERGY_TODAY,
+            ATTR_COOL_ENERGY,
+            ATTR_HEAT_ENERGY,
+            ATTR_TOTAL_POWER,
+            ATTR_TOTAL_ENERGY_TODAY,
+        ):
             supported = device.support_energy_consumption
         elif description.key in (ATTR_HUMIDITY, ATTR_TARGET_HUMIDITY):
             supported = device.support_humidity
         elif description.key == ATTR_COMPRESSOR_FREQUENCY:
             supported = device.support_compressor_frequency
-            
+        elif description.key in ("daily_pooling_error", "daily_history_error"):
+            # Always expose diagnostics sensors; they read from coordinator.
+            supported = True
+
         if supported:
             entities.append(DaikinSensor(coordinator, description))
 

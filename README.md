@@ -8,8 +8,10 @@ A custom integration for Home Assistant to locally control Daikin air conditione
 - **Zone Management**: Full support for ducted systems with individual zone control (On/Off and temperature if supported).
 - **Energy Management**: 
   - **Segmented tracking**: Heat / cool / total energy sensors per unit with `state_class=total_increasing` where applicable.
-  - **Optional auto history sync** (off by default): can periodically inject Daikin hourly data into long-term statistics — enable in integration **Options** only if you need it.
-  - **Manual correction**: Services `daikin_local.sync_history` and `daikin_local.sync_total_history` to backfill or fix delayed Daikin data without stressing the recorder on every poll.
+  - **Optional auto history sync** (off by default): reuses Daikin hourly data to correct recent long-term statistics **once per local hour**, integrated into the normal polling loop.
+  - **Manual correction**: Services `daikin_local.sync_history` and `daikin_local.sync_total_history` to backfill or fix delayed Daikin data on demand.
+- **Diagnostics**:
+  - Per-device **daily error counters** for pydaikin communication: `sensor.daikin_daily_pooling_error` and `sensor.daikin_daily_history_error` (reset at each local day change, disabled by default in the entity registry).
 - **Advanced Functions**: Support for Streamer mode, Powerful (Boost), and Econo modes.
 - **Instant Feedback**: State updates immediately in the UI after any setting change (no more waiting for the 30s refresh cycle).
 
@@ -49,13 +51,24 @@ Statistics import uses Home Assistant’s supported API (`async_import_statistic
 If you observe **missing long-term statistics for unrelated devices**, that usually points to a **recorder / database issue** (purge, disk space, restore, or Core update), not to a selective “delete all but Daikin”. **Keep regular backups** of Home Assistant (and the recorder DB) before bulk history corrections.
 
 ### History synchronization (recommended workflow)
-1. Leave **automatic hourly sync disabled** (default) to avoid unnecessary recorder load.
-2. When Daikin posts late hourly data, run:
+
+There are **two complementary ways** to correct history:
+
+1. **Manual services (recommended starting point)**  
+   When Daikin posts late hourly data, run:
    - **`daikin_local.sync_history`** — detailed sensors (energy / cool / heat).  
      Parameter: `days_ago` — `0` = today only, `1` = yesterday then today.
    - **`daikin_local.sync_total_history`** — total-energy sensor only (optional `entity_id`).
 
-Enable **Options → Auto history sync** only if you explicitly want periodic injection without using services. (Polling interval is set when adding the device, under **Reconfigure**, or in **Options** — Options override the value stored at setup when set.)
+2. **Automatic sync integrated with polling**  
+   If you enable **Options → Auto history sync**:
+   - After each **successful polling cycle**, the integration will attempt at most **one history correction per local hour** (using the same pydaikin data as the poll).
+   - Recent, completed hours are selected based on:
+     - `history_skip_extra_hours` → additional most recent hours to skip (current hour is always skipped).
+     - `history_hours_to_correct` → number of hours to correct immediately before the skipped range.
+   - If a run fails (recorder not ready, transient errors), the integration broadens the window by one extra hour on the next attempt and retries on the next poll.
+
+Polling interval is set when adding the device, under **Reconfigure**, or in **Options** — Options override the value stored at setup when set.
 
 **Integration options** also set the default for **insert missing hourly rows** when running `sync_history` / `sync_total_history` without the `insert_missing` parameter; you can still override per service call.
 
