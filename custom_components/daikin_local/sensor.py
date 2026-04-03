@@ -139,26 +139,30 @@ SENSOR_TYPES: tuple[DaikinSensorEntityDescription, ...] = (
     ),
     # Diagnostics: per-day pydaikin communication errors.
     DaikinSensorEntityDescription(
-        key="daily_pooling_error",
-        translation_key="daily_pooling_error",
+        key="pydaikin_daily_poll_errors",
+        translation_key="pydaikin_daily_poll_errors",
         device_class=None,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=None,
         entity_registry_enabled_default=False,
-        value_func=lambda data: data.appliance.coordinator.daily_polling_error_count
-        if hasattr(data.appliance, "coordinator")
-        else None,
+        value_func=lambda data: (
+            data.appliance.coordinator.daily_polling_error_count
+            if hasattr(data.appliance, "coordinator")
+            else None
+        ),
     ),
     DaikinSensorEntityDescription(
-        key="daily_history_error",
-        translation_key="daily_history_error",
+        key="pydaikin_daily_history_errors",
+        translation_key="pydaikin_daily_history_errors",
         device_class=None,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=None,
         entity_registry_enabled_default=False,
-        value_func=lambda data: data.appliance.coordinator.daily_history_poll_error_count
-        if hasattr(data.appliance, "coordinator")
-        else None,
+        value_func=lambda data: (
+            data.appliance.coordinator.daily_history_poll_error_count
+            if hasattr(data.appliance, "coordinator")
+            else None
+        ),
     ),
 )
 
@@ -192,7 +196,10 @@ async def async_setup_entry(
             supported = device.support_humidity
         elif description.key == ATTR_COMPRESSOR_FREQUENCY:
             supported = device.support_compressor_frequency
-        elif description.key in ("daily_pooling_error", "daily_history_error"):
+        elif description.key in (
+            "pydaikin_daily_poll_errors",
+            "pydaikin_daily_history_errors",
+        ):
             # Always expose diagnostics sensors; they read from coordinator.
             supported = True
 
