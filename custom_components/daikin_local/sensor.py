@@ -222,6 +222,8 @@ class DaikinSensor(DaikinEntity, SensorEntity):
         super().__init__(coordinator)
         self.entity_description = description
         self._attr_unique_id = f"{self.device.mac}-{description.key}"
+        # Explicit so HA always resolves entity.sensor.<translation_key> names (not only device name).
+        self._attr_translation_key = description.translation_key
 
     @property
     def suggested_object_id(self) -> str | None:

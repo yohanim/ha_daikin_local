@@ -23,6 +23,11 @@ from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
 
+# v1.1.0 diagnostics used these keys; v1.1.1+ uses pydaikin_* names (same sensors, new unique_id).
+_LEGACY_DIAGNOSTIC_SENSOR_KEYS: tuple[tuple[str, str], ...] = (
+    ("daily_pooling_error", "pydaikin_daily_poll_errors"),
+    ("daily_history_error", "pydaikin_daily_history_errors"),
+)
 
 PLATFORMS = [Platform.CLIMATE, Platform.SENSOR, Platform.SWITCH]
 
@@ -96,6 +101,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bo
     await coordinator.async_config_entry_first_refresh()
 
     await async_migrate_unique_id(hass, entry, device)
+    _migrate_legacy_diagnostic_sensor_unique_ids(hass, device)
 
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -118,6 +124,40 @@ async def update_listener(hass: HomeAssistant, entry: DaikinConfigEntry) -> None
 async def async_unload_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bool:
     """Unload a config entry."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+@callback
+def _migrate_legacy_diagnostic_sensor_unique_ids(
+    hass: HomeAssistant, device: Appliance
+) -> None:
+    """Merge duplicate diagnostic sensors after renaming sensor keys (1.1.0 -> 1.1.1+).
+
+    Old unique_id: <mac>-daily_pooling_error / daily_history_error
+    New unique_id: <mac>-pydaikin_daily_poll_errors / pydaikin_daily_history_errors
+    """
+    ent_reg = er.async_get(hass)
+    mac = device.mac
+    for old_suffix, new_suffix in _LEGACY_DIAGNOSTIC_SENSOR_KEYS:
+        old_uid = f"{mac}-{old_suffix}"
+        new_uid = f"{mac}-{new_suffix}"
+        old_entity_id = ent_reg.async_get_entity_id("sensor", DOMAIN, old_uid)
+        new_entity_id = ent_reg.async_get_entity_id("sensor", DOMAIN, new_uid)
+        if old_entity_id and new_entity_id:
+            _LOGGER.info(
+                "Removing legacy duplicate diagnostic entity %s (%s); keeping %s",
+                old_entity_id,
+                old_uid,
+                new_entity_id,
+            )
+            ent_reg.async_remove(old_entity_id)
+        elif old_entity_id and not new_entity_id:
+            _LOGGER.info(
+                "Migrating diagnostic entity %s unique_id %s -> %s",
+                old_entity_id,
+                old_uid,
+                new_uid,
+            )
+            ent_reg.async_update_entity(old_entity_id, new_unique_id=new_uid)
 
 
 async def async_migrate_unique_id(
