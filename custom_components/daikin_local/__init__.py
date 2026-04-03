@@ -23,10 +23,15 @@ from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
 
-# v1.1.0 diagnostics used these keys; v1.1.1+ uses pydaikin_* names (same sensors, new unique_id).
+# v1.1.0 diagnostics used these keys; v1.1.1+ uses pydaikin_daily_poll_errors.
 _LEGACY_DIAGNOSTIC_SENSOR_KEYS: tuple[tuple[str, str], ...] = (
     ("daily_pooling_error", "pydaikin_daily_poll_errors"),
-    ("daily_history_error", "pydaikin_daily_history_errors"),
+)
+
+# Removed sensor: pydaikin_daily_history_errors (and legacy daily_history_error key).
+_OBSOLETE_HISTORY_ERROR_UNIQUE_ID_SUFFIXES: tuple[str, ...] = (
+    "-pydaikin_daily_history_errors",
+    "-daily_history_error",
 )
 
 PLATFORMS = [Platform.CLIMATE, Platform.SENSOR, Platform.SWITCH]
@@ -102,6 +107,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bo
 
     await async_migrate_unique_id(hass, entry, device)
     _migrate_legacy_diagnostic_sensor_unique_ids(hass, device)
+    _remove_obsolete_history_error_sensor_entities(hass, entry.entry_id)
 
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -132,8 +138,8 @@ def _migrate_legacy_diagnostic_sensor_unique_ids(
 ) -> None:
     """Merge duplicate diagnostic sensors after renaming sensor keys (1.1.0 -> 1.1.1+).
 
-    Old unique_id: <mac>-daily_pooling_error / daily_history_error
-    New unique_id: <mac>-pydaikin_daily_poll_errors / pydaikin_daily_history_errors
+    Old unique_id: <mac>-daily_pooling_error
+    New unique_id: <mac>-pydaikin_daily_poll_errors
     """
     ent_reg = er.async_get(hass)
     mac = device.mac
@@ -158,6 +164,31 @@ def _migrate_legacy_diagnostic_sensor_unique_ids(
                 new_uid,
             )
             ent_reg.async_update_entity(old_entity_id, new_unique_id=new_uid)
+
+
+@callback
+def _remove_obsolete_history_error_sensor_entities(
+    hass: HomeAssistant, config_entry_id: str
+) -> None:
+    """Drop removed diagnostic sensors from the entity registry (idempotent).
+
+    The pydaikin_daily_history_errors entity was removed from the integration; old
+    registry rows would otherwise linger. Recorder LTS rows for the old statistic_id
+    may remain until HA purge — same as any deleted entity.
+    """
+    ent_reg = er.async_get(hass)
+    for entity in er.async_entries_for_config_entry(ent_reg, config_entry_id):
+        if entity.domain != "sensor" or entity.platform != DOMAIN:
+            continue
+        uid = entity.unique_id or ""
+        if not any(uid.endswith(sfx) for sfx in _OBSOLETE_HISTORY_ERROR_UNIQUE_ID_SUFFIXES):
+            continue
+        _LOGGER.info(
+            "Removing obsolete diagnostic entity %s (unique_id=%s)",
+            entity.entity_id,
+            uid,
+        )
+        ent_reg.async_remove(entity.entity_id)
 
 
 async def async_migrate_unique_id(

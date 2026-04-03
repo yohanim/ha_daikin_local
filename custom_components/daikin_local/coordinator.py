@@ -22,6 +22,8 @@ from .const import (
     ATTR_ENERGY_TODAY,
     ATTR_HEAT_ENERGY,
     ATTR_TOTAL_ENERGY_TODAY,
+    BRP069_POLL_DAY_POWER_EX,
+    BRP069_POLL_SENSOR_AND_CONTROL,
     CONF_AUTO_HISTORY_SYNC,
     CONF_HISTORY_HOURS_TO_CORRECT,
     CONF_HISTORY_SKIP_EXTRA_HOURS,
@@ -190,7 +192,6 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         # Daily pydaikin error counters (per local day).
         self._error_stats_date: datetime.date | None = None
         self._daily_polling_error_count: int = 0
-        self._daily_history_poll_error_count: int = 0
         self._consecutive_poll_failures = 0
         self._poll_cooldown_until: datetime | None = None
         # When Daikin communication fails at an hourly boundary, we may miss
@@ -202,13 +203,8 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
     @property
     def daily_polling_error_count(self) -> int:
-        """Errors during normal polling update_status() calls (force_refresh=False)."""
+        """Errors during polling update_status() calls (per local day)."""
         return self._daily_polling_error_count
-
-    @property
-    def daily_history_poll_error_count(self) -> int:
-        """Errors during polling when force_refresh=True for history corrections."""
-        return self._daily_history_poll_error_count
 
     def _ensure_error_stats_date(self) -> None:
         """Reset per-day error counters when the local date changes."""
@@ -216,7 +212,6 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         if self._error_stats_date != today:
             self._error_stats_date = today
             self._daily_polling_error_count = 0
-            self._daily_history_poll_error_count = 0
 
     async def _async_maybe_auto_history_sync(self) -> None:
         """After a successful poll, optionally correct LTS (same schedule as polling).
@@ -258,24 +253,14 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         timeout = _poll_timeout_sec(self.config_entry)
         now = dt_util.utcnow()
 
-        # Decide whether this poll should force-refresh dynamic resources (including
-        # extended energy data) to feed the upcoming auto history correction run.
         auto_enabled = self.config_entry.options.get(CONF_AUTO_HISTORY_SYNC, False)
-        force_refresh = False
         if auto_enabled:
-            # Also ensure per-day error counters are aligned with current local date.
             self._ensure_error_stats_date()
             now_local = dt_util.as_local(now)
             slot = (now_local.year, now_local.month, now_local.day, now_local.hour)
             if self._auto_history_local_slot != slot:
-                # New local hour: reset sync state so the next successful history run
-                # will mark this slot as complete.
                 self._auto_history_local_slot = slot
                 self._auto_history_synced_ok = False
-            # While we have not yet synced LTS for this slot, ask pydaikin (when
-            # supported) to bypass its TTL cache for dynamic resources so we see the
-            # latest extended arrays.
-            force_refresh = not self._auto_history_synced_ok
 
         # If we've recently hit a transient communication error, avoid hammering
         # the device (and spamming logs). Return cached data during cooldown.
@@ -290,24 +275,24 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
         try:
             async with asyncio.timeout(timeout):
-                if force_refresh and isinstance(self.device, DaikinBRP069):
+                if isinstance(self.device, DaikinBRP069):
+                    resources = list(BRP069_POLL_SENSOR_AND_CONTROL)
+                    if self.device.support_energy_consumption:
+                        resources.append(BRP069_POLL_DAY_POWER_EX)
                     _LOGGER.debug(
-                        "[poll] Updating %s via pydaikin update_status(force_refresh=True)",
+                        "[poll] Updating %s via update_status(%s)",
                         self.name,
+                        resources,
                     )
-                    await self.device.update_status(force_refresh=True)
+                    await self.device.update_status(resources)
                 else:
                     _LOGGER.debug(
                         "[poll] Updating %s via pydaikin update_status()", self.name
                     )
                     await self.device.update_status()
         except Exception as err:
-            # Track per-day error counters by poll type.
             self._ensure_error_stats_date()
-            if force_refresh:
-                self._daily_history_poll_error_count += 1
-            else:
-                self._daily_polling_error_count += 1
+            self._daily_polling_error_count += 1
             self._consecutive_poll_failures += 1
             # No explicit retry is scheduled here: polling already runs frequently.
 
@@ -322,12 +307,11 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             if self.data is not None and self._consecutive_poll_failures <= 3:
                 _LOGGER.warning(
                     "[poll] Transient communication error for %s (%s); "
-                    "serving cached data, cooldown=%ss (failure #%s, force_refresh=%s)",
+                    "serving cached data, cooldown=%ss (failure #%s)",
                     self.name,
                     err,
                     cooldown_s,
                     self._consecutive_poll_failures,
-                    force_refresh,
                 )
                 return self.data
 

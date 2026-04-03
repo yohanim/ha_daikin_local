@@ -40,3 +40,11 @@ CONF_HISTORY_HOURS_TO_CORRECT = "history_hours_to_correct"
 ZONE_NAME_UNCONFIGURED = "-"
 
 TIMEOUT_SEC = 30
+
+# BRP069 recurring poll: mirrors pydaikin get_info_resources() for energy devices but omits
+# aircon/get_week_power (weekly aggregates are not used by this integration).
+BRP069_POLL_SENSOR_AND_CONTROL: tuple[str, ...] = (
+    "aircon/get_sensor_info",
+    "aircon/get_control_info",
+)
+BRP069_POLL_DAY_POWER_EX = "aircon/get_day_power_ex"

@@ -138,9 +138,6 @@
       "pydaikin_daily_poll_errors": {
         "name": "Pydaikin daily poll errors"
       },
-      "pydaikin_daily_history_errors": {
-        "name": "Pydaikin daily history poll errors"
-      },
       "inside_temperature": {
         "name": "Inside temperature"
       },

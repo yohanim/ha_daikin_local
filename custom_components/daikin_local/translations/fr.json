@@ -144,9 +144,6 @@
       "pydaikin_daily_poll_errors": {
         "name": "Erreurs quotidiennes de polling pydaikin"
       },
-      "pydaikin_daily_history_errors": {
-        "name": "Erreurs quotidiennes d'historique pydaikin"
-      },
       "compressor_frequency": {
         "name": "Fréquence du compresseur"
       },
