@@ -11,7 +11,8 @@ A custom integration for Home Assistant to locally control Daikin air conditione
   - **Optional auto history sync** (off by default): reuses Daikin hourly data to correct recent long-term statistics **once per local hour**, integrated into the normal polling loop.
   - **Manual correction**: Services `daikin_local.sync_history` and `daikin_local.sync_total_history` to backfill or fix delayed Daikin data on demand.
 - **Diagnostics**:
-  - Per-device **daily error counters** for pydaikin communication: `sensor.daikin_daily_pooling_error` and `sensor.daikin_daily_history_error` (reset at each local day change, disabled by default in the entity registry).
+  - Per-device **daily error counters** for pydaikin communication: `pydaikin_daily_poll_errors` and `pydaikin_daily_history_errors` (reset at each local day change, disabled by default in the entity registry).
+- **Clear default entity IDs**: For **new** devices and **new** installations, the integration suggests readable `entity_id` values (prefix from the appliance name, suffix from the sensor key), so you get stable names such as `sensor.<room>_energy_consumption` instead of ambiguous `sensor.<room>_energy_2` when possible.
 - **Advanced Functions**: Support for Streamer mode, Powerful (Boost), and Econo modes.
 - **Instant Feedback**: State updates immediately in the UI after any setting change (no more waiting for the 30s refresh cycle).
 
@@ -104,6 +105,35 @@ Correlation in time with running `sync_history` does **not** prove causation: th
 - Check **host disk space** and Core logs around the time the gap started.
 - Restore from a **backup** taken before the issue if the database was damaged.
 - Use **Developer Tools → Statistics** to confirm whether data is missing in the DB or only in the dashboard.
+
+## 🏷️ Entity IDs: new installs and renaming from the UI
+
+### New devices and new installations
+
+The integration sets a **suggested `entity_id`** when entities are first registered: a slug from the Daikin **device name** plus a stable suffix (sensor key, `zone_N`, `streamer`, etc.). That keeps names predictable and aligned with each entity’s `unique_id` (for example `<mac>-energy_consumption`). Existing entities in the registry are **not** renamed automatically when you upgrade the integration.
+
+### Renaming an `entity_id` in Home Assistant (2026.3+)
+
+Use the **official entity settings** so history and long-term statistics stay tied to the same logical entity (Core migrates recorder metadata when the entity registry changes).
+
+1. Open **Settings** → **Devices & services** (or **Settings** → **Entities** if your build exposes a direct **Entities** entry).
+2. Open the **Entities** tab (or use the header search) and find the Daikin Local entity.
+3. Click the entity → **⚙️** (settings) or **Edit**.
+4. Expand **Advanced settings** (wording may vary slightly).
+5. Set the **Entity ID**:
+   - **Circular-arrow reset** (next to the Entity ID field): restores Home Assistant’s **suggested** id from this integration. It is derived from the **Daikin device name** (slug) plus a **suffix aligned with `unique_id`**: for sensors, the key after `<mac>-` (e.g. `energy_consumption`); for climate / zone / switch entities, the same stable segments as in code (`zone_N`, `streamer`, `toggle`, zone temperature, etc.). You do not need to type the suffix yourself.
+   - **Manual edit**: enter any valid id (lowercase, `domain.name` for sensors, e.g. `sensor.salon_energy_consumption`) if you prefer a custom name.
+6. Save.
+
+**After renaming**
+
+- **History and long-term statistics** (including energy graphs) are updated by Home Assistant for that entity. Allow some time for background work; avoid mass renames and immediate restarts in a tight loop.
+- **Energy dashboard configuration** (Settings → **Dashboards** → **Energy**, or **Settings** → **Energy** depending on your UI):  
+  - In most cases, references **follow** the renamed entity.  
+  - **Verify** the Energy configuration screen: if a grid entry shows **Unknown entity**, **unavailable**, or clearly wrong data, open that section (individual device, grid consumption, gas, etc.), **remove** the broken line or **re-select** the sensor from the list so it points at the new `entity_id`. You do not need to change anything if the card still shows the correct sensor and live values.
+- **Automations, scripts, and YAML** that used the **old** `entity_id` must be updated to the **new** id (or use **device triggers** / **entity labels** where possible to reduce breakage next time).
+
+Take a **backup** before renaming many entities at once.
 
 ## 🛠️ Development & Support
 

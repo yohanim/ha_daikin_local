@@ -11,6 +11,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .const import ZONE_NAME_UNCONFIGURED
 from .coordinator import DaikinConfigEntry, DaikinCoordinator
 from .entity import DaikinEntity
+from .utils import device_object_id_prefix
 
 DAIKIN_ATTR_ADVANCED = "adv"
 DAIKIN_ATTR_STREAMER = "streamer"
@@ -55,6 +56,11 @@ class DaikinZoneSwitch(DaikinEntity, SwitchEntity):
         self._attr_name = self.device.zones[self._zone_id][0]
 
     @property
+    def suggested_object_id(self) -> str | None:
+        prefix = device_object_id_prefix(self.device.values.get("name"))
+        return f"{prefix}_zone_{self._zone_id}"
+
+    @property
     def is_on(self) -> bool:
         """Return the state of the sensor."""
         return self.device.zones[self._zone_id][1] == "1"
@@ -83,6 +89,11 @@ class DaikinStreamerSwitch(DaikinEntity, SwitchEntity):
         self._attr_unique_id = f"{self.device.mac}-streamer"
 
     @property
+    def suggested_object_id(self) -> str | None:
+        prefix = device_object_id_prefix(self.device.values.get("name"))
+        return f"{prefix}_streamer"
+
+    @property
     def is_on(self) -> bool:
         """Return the state of the sensor."""
         return DAIKIN_ATTR_STREAMER in self.device.represent(DAIKIN_ATTR_ADVANCED)[1]
@@ -109,6 +120,11 @@ class DaikinToggleSwitch(DaikinEntity, SwitchEntity):
         """Initialize switch."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{self.device.mac}-toggle"
+
+    @property
+    def suggested_object_id(self) -> str | None:
+        prefix = device_object_id_prefix(self.device.values.get("name"))
+        return f"{prefix}_toggle"
 
     @property
     def is_on(self) -> bool:

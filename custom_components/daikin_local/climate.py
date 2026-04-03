@@ -38,6 +38,7 @@ from .const import (
 )
 from .coordinator import DaikinConfigEntry, DaikinCoordinator
 from .entity import DaikinEntity
+from .utils import device_object_id_prefix
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -376,6 +377,11 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
             ret += [PRESET_ECO, PRESET_BOOST]
         return ret
 
+    @property
+    def suggested_object_id(self) -> str | None:
+        """One climate entity per appliance: slug from device name."""
+        return device_object_id_prefix(self.device.values.get("name"))
+
     async def async_turn_on(self) -> None:
         """Turn device on."""
         await self.device.set({"pow": "1"})
@@ -403,6 +409,12 @@ class DaikinZoneClimate(DaikinEntity, ClimateEntity):
         self._zone_id = zone_id
         self._attr_unique_id = f"{self.device.mac}-zone{zone_id}-temperature"
         # We don't set _attr_name here, let strings.json handle it via translation_key
+
+    @property
+    def suggested_object_id(self) -> str | None:
+        """Align object_id with unique_id segments (zone / temperature)."""
+        prefix = device_object_id_prefix(self.device.values.get("name"))
+        return f"{prefix}_zone_{self._zone_id}_temperature"
 
     @property
     def hvac_modes(self) -> list[HVACMode]:

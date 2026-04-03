@@ -35,6 +35,7 @@ from .const import (
 )
 from .coordinator import DaikinConfigEntry, DaikinCoordinator, DaikinData
 from .entity import DaikinEntity
+from .utils import device_object_id_prefix
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -221,6 +222,12 @@ class DaikinSensor(DaikinEntity, SensorEntity):
         super().__init__(coordinator)
         self.entity_description = description
         self._attr_unique_id = f"{self.device.mac}-{description.key}"
+
+    @property
+    def suggested_object_id(self) -> str | None:
+        """Prefer object_id suffix matching the sensor key (see unique_id)."""
+        prefix = device_object_id_prefix(self.device.values.get("name"))
+        return f"{prefix}_{self.entity_description.key}"
 
     @property
     def native_value(self) -> float | None:
