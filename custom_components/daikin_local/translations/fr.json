@@ -56,6 +56,14 @@
         "insert_missing": {
           "name": "Créer les créneaux manquants",
           "description": "Si désactivé (défaut), seuls les créneaux qui ont déjà des statistiques long terme sont mis à jour — évite les erreurs UNIQUE avec le recorder. Activez pour combler les trous."
+        },
+        "history_skip_extra_hours": {
+          "name": "Heures supplémentaires à ignorer",
+          "description": "Surcharge optionnelle pour cet appel. Heures à ignorer en plus de l'heure en cours ; saut total = 1 + cette valeur. Si renseigné (seul ou avec l'autre paramètre), pas de borne minimale."
+        },
+        "history_hours_to_correct": {
+          "name": "Créneaux à corriger",
+          "description": "Surcharge optionnelle pour cet appel. Nombre d'heures locales complètes à corriger. Si renseigné (seul ou avec l'autre paramètre), pas de borne minimale."
         }
       }
     },
@@ -74,6 +82,14 @@
         "insert_missing": {
           "name": "Créer les créneaux manquants",
           "description": "Comme sync_history : désactivé par défaut = mise à jour seulement ; activé = insertion des heures manquantes (risque de conflit avec le recorder)."
+        },
+        "history_skip_extra_hours": {
+          "name": "Heures supplémentaires à ignorer",
+          "description": "Comme sync_history : saut total = 1 + cette valeur. Pas de borne minimale si renseigné."
+        },
+        "history_hours_to_correct": {
+          "name": "Créneaux à corriger",
+          "description": "Comme sync_history : pas de borne minimale si renseigné."
         }
       }
     }

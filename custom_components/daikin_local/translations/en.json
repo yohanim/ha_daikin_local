@@ -56,6 +56,14 @@
         "insert_missing": {
           "name": "Insert missing hourly rows",
           "description": "If off (default), only hours that already have long-term statistics are updated, avoiding duplicate-row errors with the recorder. Turn on to backfill gaps."
+        },
+        "history_skip_extra_hours": {
+          "name": "Additional hours to skip",
+          "description": "Optional override for this run. Extra hours to skip after the current hour; total skip = 1 + this value. If set (alone or with hours to correct), values are not clamped to a minimum."
+        },
+        "history_hours_to_correct": {
+          "name": "Hours to correct",
+          "description": "Optional override for this run. Number of completed local hours to correct. If set (alone or with additional skip), values are not clamped."
         }
       }
     },
@@ -74,6 +82,14 @@
         "insert_missing": {
           "name": "Insert missing hourly rows",
           "description": "Same as sync_history: default off updates only existing LTS hours; on inserts missing hours (may conflict with recorder compilation)."
+        },
+        "history_skip_extra_hours": {
+          "name": "Additional hours to skip",
+          "description": "Same as sync_history: optional override; total skip = 1 + this value. Unclamped when set."
+        },
+        "history_hours_to_correct": {
+          "name": "Hours to correct",
+          "description": "Same as sync_history: optional override. Unclamped when set."
         }
       }
     }

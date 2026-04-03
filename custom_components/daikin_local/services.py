@@ -7,7 +7,12 @@ from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 
-from .const import CONF_INSERT_MISSING, DOMAIN
+from .const import (
+    CONF_HISTORY_HOURS_TO_CORRECT,
+    CONF_HISTORY_SKIP_EXTRA_HOURS,
+    CONF_INSERT_MISSING,
+    DOMAIN,
+)
 
 SERVICE_SYNC_HISTORY = "sync_history"
 SERVICE_SYNC_TOTAL_HISTORY = "sync_total_history"
@@ -19,6 +24,8 @@ SERVICE_SCHEMA = vol.Schema(
         ),
         vol.Optional(ATTR_ENTITY_ID): vol.Coerce(str),
         vol.Optional(CONF_INSERT_MISSING): cv.boolean,
+        vol.Optional(CONF_HISTORY_SKIP_EXTRA_HOURS): vol.Coerce(int),
+        vol.Optional(CONF_HISTORY_HOURS_TO_CORRECT): vol.Coerce(int),
     }
 )
 
@@ -34,6 +41,16 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             if CONF_INSERT_MISSING in call.data
             else None
         )
+        history_skip_extra_hours = (
+            call.data[CONF_HISTORY_SKIP_EXTRA_HOURS]
+            if CONF_HISTORY_SKIP_EXTRA_HOURS in call.data
+            else None
+        )
+        history_hours_to_correct = (
+            call.data[CONF_HISTORY_HOURS_TO_CORRECT]
+            if CONF_HISTORY_HOURS_TO_CORRECT in call.data
+            else None
+        )
 
         # In HA 2026.3, runtime_data is stored in entry.runtime_data
         for entry in hass.config_entries.async_entries(DOMAIN):
@@ -43,6 +60,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                     days_ago=days_ago,
                     target_entity_id=target_entity_id,
                     insert_missing=insert_missing,
+                    history_skip_extra_hours=history_skip_extra_hours,
+                    history_hours_to_correct=history_hours_to_correct,
                 )
 
     hass.services.async_register(
@@ -61,6 +80,16 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             if CONF_INSERT_MISSING in call.data
             else None
         )
+        history_skip_extra_hours = (
+            call.data[CONF_HISTORY_SKIP_EXTRA_HOURS]
+            if CONF_HISTORY_SKIP_EXTRA_HOURS in call.data
+            else None
+        )
+        history_hours_to_correct = (
+            call.data[CONF_HISTORY_HOURS_TO_CORRECT]
+            if CONF_HISTORY_HOURS_TO_CORRECT in call.data
+            else None
+        )
 
         for entry in hass.config_entries.async_entries(DOMAIN):
             if hasattr(entry, "runtime_data") and entry.runtime_data:
@@ -69,6 +98,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                     days_ago=days_ago,
                     target_entity_id=target_entity_id,
                     insert_missing=insert_missing,
+                    history_skip_extra_hours=history_skip_extra_hours,
+                    history_hours_to_correct=history_hours_to_correct,
                 )
 
     hass.services.async_register(

@@ -78,6 +78,7 @@ def _recent_completed_hours_by_local_date(
     include_extra_hour: bool = False,
     skip_hours: int = 2,
     hours_to_correct: int = 3,
+    clamp: bool = True,
 ) -> dict[datetime.date, set[int]]:
     """Hour indices for completed local hours to (re)inject.
 
@@ -94,9 +95,16 @@ def _recent_completed_hours_by_local_date(
     When ``include_extra_hour`` is True, we correct one additional hour (i.e.
     ``hours_to_correct + 1``). This is used after a history-sync failure so we
     can "catch up" one missed slot later.
+
+    When ``clamp`` is False, ``skip_hours`` and ``hours_to_correct`` are used as
+    given (service-call overrides); otherwise they are clamped to at least 1.
     """
-    skip_hours = max(1, int(skip_hours))
-    hours_to_correct = max(1, int(hours_to_correct))
+    if clamp:
+        skip_hours = max(1, int(skip_hours))
+        hours_to_correct = max(1, int(hours_to_correct))
+    else:
+        skip_hours = int(skip_hours)
+        hours_to_correct = int(hours_to_correct)
 
     now_local = dt_util.as_local(dt_util.utcnow())
     mapping: dict[datetime.date, set[int]] = {}
@@ -120,6 +128,33 @@ def _history_skip_hours_from_options(options: dict) -> int:
     # Backward compat: old meaning was total skip including current hour.
     legacy_total = int(options.get("history_skip_hours") or 2)
     return max(1, legacy_total)
+
+
+def _history_window_from_entry_and_overrides(
+    options: dict,
+    *,
+    history_skip_extra_hours: int | None,
+    history_hours_to_correct: int | None,
+) -> tuple[int, int, bool]:
+    """Resolve skip/correct window for history imports.
+
+    Returns ``(skip_hours, hours_to_correct, clamp)``. When either service
+    override is set, ``clamp`` is False so values are passed through to
+    :func:`_recent_completed_hours_by_local_date` without forcing a minimum of 1.
+    """
+    override = (
+        history_skip_extra_hours is not None or history_hours_to_correct is not None
+    )
+    clamp = not override
+    if history_skip_extra_hours is not None:
+        skip_hours = 1 + int(history_skip_extra_hours)
+    else:
+        skip_hours = _history_skip_hours_from_options(options)
+    if history_hours_to_correct is not None:
+        hours_to_correct = int(history_hours_to_correct)
+    else:
+        hours_to_correct = int(options.get(CONF_HISTORY_HOURS_TO_CORRECT, 3))
+    return skip_hours, hours_to_correct, clamp
 
 
 def _lts_row_start_to_datetime(
@@ -350,6 +385,8 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         target_entity_id: str | None = None,
         *,
         insert_missing: bool | None = None,
+        history_skip_extra_hours: int | None = None,
+        history_hours_to_correct: int | None = None,
     ) -> None:
         """Sync energy history with Daikin historical data.
 
@@ -360,6 +397,10 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         ``insert_missing``: None = use integration option ``insert_missing``;
         False = only update hours that already have LTS rows; True = may insert
         missing hours (risk of recorder UNIQUE conflicts).
+
+        ``history_skip_extra_hours`` / ``history_hours_to_correct``: when either
+        is set (e.g. from a service call), they override the integration options
+        for this run only; the hour window is not clamped to minimum 1.
 
         """
         if insert_missing is None:
@@ -380,9 +421,12 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         )
 
         async with self._history_sync_lock:
-            skip_hours = _history_skip_hours_from_options(self.config_entry.options)
-            hours_to_correct = int(
-                self.config_entry.options.get(CONF_HISTORY_HOURS_TO_CORRECT, 3)
+            skip_hours, hours_to_correct, window_clamp = (
+                _history_window_from_entry_and_overrides(
+                    self.config_entry.options,
+                    history_skip_extra_hours=history_skip_extra_hours,
+                    history_hours_to_correct=history_hours_to_correct,
+                )
             )
             # Inject only the last 3 completed local hours (skip current + previous).
             # This avoids trying to correct hours/whole days that the recorder has
@@ -391,6 +435,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 include_extra_hour=self._history_backfill_extra_hour,
                 skip_hours=skip_hours,
                 hours_to_correct=hours_to_correct,
+                clamp=window_clamp,
             )
             today_start = dt_util.start_of_local_day()
             today_date = today_start.date()
@@ -526,6 +571,8 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         target_entity_id: str | None = None,
         *,
         insert_missing: bool | None = None,
+        history_skip_extra_hours: int | None = None,
+        history_hours_to_correct: int | None = None,
     ) -> None:
         """Sync *only* the smoothed total/compressor energy history.
 
@@ -534,6 +581,9 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         calculations depending on which entities are configured.
 
         ``insert_missing``: None = use integration option (same as sync_history).
+
+        ``history_skip_extra_hours`` / ``history_hours_to_correct``: same as
+        :meth:`async_sync_history`.
         """
         if insert_missing is None:
             insert_missing = self.config_entry.options.get(CONF_INSERT_MISSING, False)
@@ -553,15 +603,19 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         )
 
         async with self._history_sync_lock:
-            skip_hours = _history_skip_hours_from_options(self.config_entry.options)
-            hours_to_correct = int(
-                self.config_entry.options.get(CONF_HISTORY_HOURS_TO_CORRECT, 3)
+            skip_hours, hours_to_correct, window_clamp = (
+                _history_window_from_entry_and_overrides(
+                    self.config_entry.options,
+                    history_skip_extra_hours=history_skip_extra_hours,
+                    history_hours_to_correct=history_hours_to_correct,
+                )
             )
             # Inject only the last 3 completed local hours (skip current + previous).
             recent_hours_by_date = _recent_completed_hours_by_local_date(
                 include_extra_hour=self._history_backfill_extra_hour,
                 skip_hours=skip_hours,
                 hours_to_correct=hours_to_correct,
+                clamp=window_clamp,
             )
             today_start = dt_util.start_of_local_day()
             today_date = today_start.date()

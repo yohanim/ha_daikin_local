@@ -28,6 +28,20 @@ sync_history:
       default: false
       selector:
         boolean:
+    history_skip_extra_hours:
+      name: Additional hours to skip
+      description: "Optional override for this run only (integration options apply if omitted). Hours to ignore in addition to the current hour; total skip = 1 + this value. When set together with history_hours_to_correct (or alone), the window is not clamped to a minimum."
+      required: false
+      selector:
+        number:
+          mode: box
+    history_hours_to_correct:
+      name: Hours to correct
+      description: "Optional override for this run only. Number of completed local hourly slots to correct before the skipped range. When set together with history_skip_extra_hours (or alone), values are not clamped."
+      required: false
+      selector:
+        number:
+          mode: box
 
 sync_total_history:
   name: Sync total energy history
@@ -59,3 +73,17 @@ sync_total_history:
       default: false
       selector:
         boolean:
+    history_skip_extra_hours:
+      name: Additional hours to skip
+      description: "Same as sync_history: optional override for this run; total skip = 1 + this value (current hour always counted). Unclamped when this or history_hours_to_correct is set."
+      required: false
+      selector:
+        number:
+          mode: box
+    history_hours_to_correct:
+      name: Hours to correct
+      description: "Same as sync_history: optional override for how many completed hourly slots to correct. Unclamped when this or history_skip_extra_hours is set."
+      required: false
+      selector:
+        number:
+          mode: box
