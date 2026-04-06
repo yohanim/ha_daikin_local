@@ -103,6 +103,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bo
 
     coordinator = DaikinCoordinator(hass, entry, device)
 
+    await coordinator.async_load_error_stats()
     await coordinator.async_config_entry_first_refresh()
 
     await async_migrate_unique_id(hass, entry, device)

@@ -2,7 +2,7 @@
 
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import logging
 import re
 
@@ -12,6 +12,7 @@ from homeassistant.const import CONF_TIMEOUT, UnitOfEnergy
 from homeassistant.core import HomeAssistant
 from homeassistant.components import recorder
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
@@ -28,6 +29,9 @@ from .const import (
     TIMEOUT_SEC,
 )
 from .utils import calculate_energy_sum, parse_daikin_list
+
+ERROR_STATS_STORAGE_VERSION = 1
+ERROR_STATS_STORAGE_KEY = f"{DOMAIN}.daily_poll_error_stats"
 
 # Recorder statistics are only available when the recorder integration is loaded.
 # We therefore import them lazily when we actually need to inject history.
@@ -232,17 +236,71 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         # Prevent concurrent history imports into recorder statistics.
         self._history_sync_lock = asyncio.Lock()
 
+    async def async_load_error_stats(self) -> None:
+        """Restore daily poll error count from storage (same local calendar day)."""
+        store = Store(
+            self.hass,
+            ERROR_STATS_STORAGE_VERSION,
+            ERROR_STATS_STORAGE_KEY,
+        )
+        raw = await store.async_load()
+        if not raw:
+            return
+        row = raw.get(self.config_entry.entry_id)
+        if not row:
+            return
+        today = dt_util.as_local(dt_util.utcnow()).date()
+        ds = row.get("date")
+        if not isinstance(ds, str):
+            return
+        try:
+            stored = date.fromisoformat(ds)
+        except ValueError:
+            return
+        if stored != today:
+            self._error_stats_date = today
+            self._daily_polling_error_count = 0
+            await self._async_persist_error_stats()
+            return
+        self._error_stats_date = today
+        self._daily_polling_error_count = int(row.get("polling_errors", 0))
+
+    def _schedule_persist_error_stats(self) -> None:
+        """Save daily poll error count (survives HA restart for the same local day)."""
+        self.hass.async_create_task(self._async_persist_error_stats())
+
+    async def _async_persist_error_stats(self) -> None:
+        store = Store(
+            self.hass,
+            ERROR_STATS_STORAGE_VERSION,
+            ERROR_STATS_STORAGE_KEY,
+        )
+        raw = await store.async_load()
+        if raw is None:
+            raw = {}
+        today = dt_util.as_local(dt_util.utcnow()).date().isoformat()
+        raw[self.config_entry.entry_id] = {
+            "date": today,
+            "polling_errors": self._daily_polling_error_count,
+        }
+        await store.async_save(raw)
+
     @property
     def daily_polling_error_count(self) -> int:
         """Errors during polling update_status() calls (per local day)."""
         return self._daily_polling_error_count
 
-    def _ensure_error_stats_date(self) -> None:
-        """Reset per-day error counters when the local date changes."""
+    def _ensure_error_stats_date(self) -> bool:
+        """Reset per-day error counters when the local date changes.
+
+        Returns True if the calendar day rolled (counter was reset to 0).
+        """
         today = dt_util.as_local(dt_util.utcnow()).date()
         if self._error_stats_date != today:
             self._error_stats_date = today
             self._daily_polling_error_count = 0
+            return True
+        return False
 
     async def _async_maybe_auto_history_sync(self) -> None:
         """After a successful poll, optionally correct LTS (same schedule as polling).
@@ -284,9 +342,11 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         timeout = _poll_timeout_sec(self.config_entry)
         now = dt_util.utcnow()
 
+        if self._ensure_error_stats_date():
+            self._schedule_persist_error_stats()
+
         auto_enabled = self.config_entry.options.get(CONF_AUTO_HISTORY_SYNC, False)
         if auto_enabled:
-            self._ensure_error_stats_date()
             now_local = dt_util.as_local(now)
             slot = (now_local.year, now_local.month, now_local.day, now_local.hour)
             if self._auto_history_local_slot != slot:
@@ -313,6 +373,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         except Exception as err:
             self._ensure_error_stats_date()
             self._daily_polling_error_count += 1
+            self._schedule_persist_error_stats()
             self._consecutive_poll_failures += 1
             # No explicit retry is scheduled here: polling already runs frequently.
 
