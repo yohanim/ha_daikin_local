@@ -8,6 +8,8 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 
 from .const import (
+    CONF_ENERGY_GROUP_ID,
+    CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER,
     CONF_HISTORY_HOURS_TO_CORRECT,
     CONF_HISTORY_SKIP_EXTRA_HOURS,
     CONF_INSERT_MISSING,
@@ -91,7 +93,29 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             else None
         )
 
-        for entry in hass.config_entries.async_entries(DOMAIN):
+        entries = [
+            e
+            for e in hass.config_entries.async_entries(DOMAIN)
+            if hasattr(e, "runtime_data") and e.runtime_data
+        ]
+
+        # If at least one entry declares itself "total history master" for a group,
+        # run the group-scoped correction only on masters to avoid duplicate imports.
+        masters_by_group: set[str] = set()
+        for e in entries:
+            group = (e.options.get(CONF_ENERGY_GROUP_ID) or "").strip()
+            if (
+                group
+                and bool(e.options.get(CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER, False))
+            ):
+                masters_by_group.add(group)
+
+        for entry in entries:
+            group = (entry.options.get(CONF_ENERGY_GROUP_ID) or "").strip()
+            if group and group in masters_by_group and not bool(
+                entry.options.get(CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER, False)
+            ):
+                continue
             if hasattr(entry, "runtime_data") and entry.runtime_data:
                 coordinator = entry.runtime_data
                 await coordinator.async_sync_total_history(

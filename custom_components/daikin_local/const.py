@@ -39,6 +39,13 @@ CONF_INSERT_MISSING = "insert_missing"
 CONF_POLL_INTERVAL_STATE_SEC = "poll_interval_state_sec"
 CONF_POLL_INTERVAL_ENERGY_SEC = "poll_interval_energy_sec"
 
+# Group ID used to aggregate totals across multiple adapters (e.g. two BRP069 on same system).
+CONF_ENERGY_GROUP_ID = "energy_group_id"
+
+# When set on one entry within an energy_group_id, only those marked as master will run
+# group-scoped total history sync (avoids duplicate corrections across the group).
+CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER = "energy_group_total_history_master"
+
 # History correction window:
 # - skip_extra_hours: number of *additional* most recent local hours to ignore,
 #   besides the current hour which is always skipped.

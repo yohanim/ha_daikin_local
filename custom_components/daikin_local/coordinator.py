@@ -25,6 +25,7 @@ from .const import (
     ATTR_TOTAL_ENERGY_TODAY,
     ATTR_TOTAL_POWER,
     CONF_AUTO_HISTORY_SYNC,
+    CONF_ENERGY_GROUP_ID,
     CONF_HISTORY_HOURS_TO_CORRECT,
     CONF_HISTORY_SKIP_EXTRA_HOURS,
     CONF_INSERT_MISSING,
@@ -847,11 +848,23 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             def _aggregate_all_devices_cool_heat(
                 target_days_ago: int,
             ) -> list[int] | None:
-                """Build a global total series by summing all devices cool+heat."""
+                """Build a total series by summing cool+heat for a group of devices."""
                 aggregate = [0] * 24
                 found = False
+                group_id = (
+                    (self.config_entry.options.get(CONF_ENERGY_GROUP_ID) or "").strip()
+                )
 
                 for entry in self.hass.config_entries.async_entries(DOMAIN):
+                    other_group = (entry.options.get(CONF_ENERGY_GROUP_ID) or "").strip()
+                    if group_id:
+                        # Group-scoped aggregation: only same-group entries.
+                        if other_group != group_id:
+                            continue
+                    else:
+                        # Ungrouped aggregation: only entries without a group id.
+                        if other_group:
+                            continue
                     runtime = getattr(entry, "runtime_data", None)
                     if runtime is None or not hasattr(runtime, "device"):
                         continue

@@ -29,6 +29,8 @@ from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
 from .const import (
     CONF_AUTO_HISTORY_SYNC,
+    CONF_ENERGY_GROUP_ID,
+    CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER,
     CONF_HISTORY_HOURS_TO_CORRECT,
     CONF_HISTORY_SKIP_EXTRA_HOURS,
     CONF_INSERT_MISSING,
@@ -248,6 +250,10 @@ class OptionsFlowHandler(OptionsFlow):
         suggested = {
             CONF_TIMEOUT: self.config_entry.options.get(CONF_TIMEOUT)
             or self.config_entry.data.get(CONF_TIMEOUT, TIMEOUT_SEC),
+            CONF_ENERGY_GROUP_ID: self.config_entry.options.get(CONF_ENERGY_GROUP_ID, ""),
+            CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER: self.config_entry.options.get(
+                CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER, False
+            ),
             CONF_AUTO_HISTORY_SYNC: self.config_entry.options.get(
                 CONF_AUTO_HISTORY_SYNC, False
             ),
@@ -264,6 +270,10 @@ class OptionsFlowHandler(OptionsFlow):
 
         schema_dict: dict = {
             vol.Optional(CONF_TIMEOUT, default=TIMEOUT_SEC): int,
+            vol.Optional(CONF_ENERGY_GROUP_ID, default=""): str,
+            vol.Optional(
+                CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER, default=False
+            ): cv.boolean,
         }
         if show_domain_polling:
             suggested.update(

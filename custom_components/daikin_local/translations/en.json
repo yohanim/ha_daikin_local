@@ -30,6 +30,8 @@
       "init": {
         "data": {
           "timeout": "Polling interval (seconds)",
+          "energy_group_id": "Energy group id (optional)",
+          "energy_group_total_history_master": "Total history master for this energy group",
           "poll_interval_state_sec": "State polling interval (seconds)",
           "poll_interval_energy_sec": "Energy polling interval (seconds)",
           "auto_history_sync": "Hourly auto-sync of energy statistics to the recorder",

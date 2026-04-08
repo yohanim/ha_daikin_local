@@ -11,7 +11,7 @@ A custom integration for Home Assistant to locally control Daikin air conditione
   - **Optional auto history sync** (off by default): reuses Daikin hourly data to correct recent long-term statistics **once per local hour**, integrated into the normal polling loop.
   - **Manual correction**: Services `daikin_local.sync_history` and `daikin_local.sync_total_history` to backfill or fix delayed Daikin data on demand.
 - **Diagnostics**:
-  - Per-device **daily error counter** for pydaikin communication: `pydaikin_daily_poll_errors` (reset at each local day change, disabled by default in the entity registry).
+  - Per-device **daily error counters** for pydaikin communication (disabled by default in the entity registry): `pydaikin_daily_poll_errors`, plus BRP069 per-domain counters `pydaikin_daily_state_poll_errors` and `pydaikin_daily_energy_poll_errors`.
 - **Clear default entity IDs**: For **new** devices and **new** installations, `suggested_object_id` is only the **suffix** (sensor key, `hvac`, `zone_N`, …). Home Assistant then builds `sensor.<device_slug>_<suffix>` (e.g. `sensor.salon_humidity`), so the device name is **not** duplicated in the `entity_id`.
 - **Advanced Functions**: Support for Streamer mode, Powerful (Boost), and Econo modes.
 - **Instant Feedback**: State updates immediately in the UI after any setting change (no more waiting for the 30s refresh cycle).
@@ -20,6 +20,7 @@ A custom integration for Home Assistant to locally control Daikin air conditione
   - BRP069 optimization: polling can be split into **state** vs **energy** domains with different intervals to reduce network load and timeout risk.
     - State: `aircon/get_sensor_info`, `aircon/get_control_info`
     - Energy: `aircon/get_day_power_ex`, `aircon/get_week_power`
+    - Options: `poll_interval_state_sec` and `poll_interval_energy_sec` (shown only for BRP069 with energy support).
 
 ## 🚀 Installation
 
@@ -51,6 +52,10 @@ UI strings: `custom_components/daikin_local/strings.json` (English, required by 
 
 ## ⚡ Energy Management Details
 
+### Estimated power (`total_power`)
+
+The `total_power` sensor (kW) is an **estimated** value derived by pydaikin from the slope of total energy counters. On some systems this estimate can be noisy when totals are inconsistent, so it is **disabled by default**. When enabled, it is updated on **energy-domain refreshes** (BRP069) to avoid excessive calculations and log spam.
+
 ### What gets written to the recorder
 Statistics import uses Home Assistant’s supported API (`async_import_statistics`) and **only targets entity IDs** belonging to this integration’s energy sensors (resolved via the entity registry). It does **not** iterate your whole system and cannot intentionally delete other integrations’ entities.
 
@@ -68,13 +73,25 @@ There are **two complementary ways** to correct history:
 
 2. **Automatic sync integrated with polling**  
    If you enable **Options → Auto history sync**:
-   - After each **successful polling cycle**, the integration will attempt at most **one history correction per local hour** (using the same pydaikin data as the poll).
+   - After each **successful energy refresh**, the integration will attempt at most **one history correction per local hour** (using the same pydaikin data as the poll).
    - Recent, completed hours are selected based on:
      - `history_skip_extra_hours` → additional most recent hours to skip (current hour is always skipped).
      - `history_hours_to_correct` → number of hours to correct immediately before the skipped range.
    - If a run fails (recorder not ready, transient errors), the integration broadens the window by one extra hour on the next attempt and retries on the next poll.
 
 Polling interval is set when adding the device, under **Reconfigure**, or in **Options** — Options override the value stored at setup when set.
+
+### Multiple adapters on the same system (energy grouping)
+
+If you have multiple controllers (e.g. **two BRP069** adapters) that belong to the **same outdoor unit / heat pump**, you may want to avoid double work or ambiguous “system total” corrections.
+
+Options:
+
+- **`energy_group_id`** (optional): assign the same group id (e.g. `PAC_1`) to all entries that belong to the same physical system.  
+  This group id is used to **scope the fallback aggregation** for total history correction: when rebuilding a total series by summing cool+heat, only devices from the same group are included.  
+  If `energy_group_id` is empty, only **ungrouped** entries are aggregated (grouped entries are excluded).
+- **`energy_group_total_history_master`** (optional): mark exactly one entry per group as the **master**.  
+  When any entry in a group is marked master, the `daikin_local.sync_total_history` service runs only on the group’s master entry to avoid duplicate corrections.
 
 **Integration options** also set the default for **insert missing hourly rows** when running `sync_history` / `sync_total_history` without the `insert_missing` parameter; you can still override per service call.
 
