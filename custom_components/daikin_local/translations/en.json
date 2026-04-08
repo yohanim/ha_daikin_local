@@ -30,12 +30,14 @@
       "init": {
         "data": {
           "timeout": "Polling interval (seconds)",
+          "poll_interval_state_sec": "State polling interval (seconds)",
+          "poll_interval_energy_sec": "Energy polling interval (seconds)",
           "auto_history_sync": "Hourly auto-sync of energy statistics to the recorder",
           "insert_missing": "Allow inserting missing hourly statistics rows",
           "history_skip_extra_hours": "Additional hours to skip (current hour is always skipped)",
           "history_hours_to_correct": "Number of previous hours to correct"
         },
-        "description": "Polling interval overrides the value from initial setup when set. Auto history sync uses the same schedule as polling: after each successful sensor refresh, LTS correction is attempted at most once per local hour (retried on the next poll if it fails). Insert missing: when correcting history, allow creating LTS rows for hours that do not exist yet (may rarely conflict with the recorder; services can override per call).",
+        "description": "Polling interval overrides the value from initial setup when set. For BRP069 adapters, polling can be split into domains: state (sensor/control) and energy (day/week power) with separate intervals. Auto history sync uses the same schedule as polling: after each successful sensor refresh, LTS correction is attempted at most once per local hour (retried on the next poll if it fails). Insert missing: when correcting history, allow creating LTS rows for hours that do not exist yet (may rarely conflict with the recorder; services can override per call).",
         "title": "Daikin AC options"
       }
     }
@@ -153,6 +155,12 @@
       },
       "pydaikin_daily_poll_errors": {
         "name": "Pydaikin daily poll errors"
+      },
+      "pydaikin_daily_state_poll_errors": {
+        "name": "Pydaikin daily state poll errors"
+      },
+      "pydaikin_daily_energy_poll_errors": {
+        "name": "Pydaikin daily energy poll errors"
       },
       "inside_temperature": {
         "name": "Inside temperature"

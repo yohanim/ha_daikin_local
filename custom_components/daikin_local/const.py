@@ -23,11 +23,21 @@ ATTR_STATE_OFF = "off"
 
 KEY_MAC = "mac"
 
+# Entry data flags (set at config / reconfigure time)
+KEY_IS_BRP069 = "is_brp069"
+KEY_SUPPORTS_ENERGY = "supports_energy"
+
 CONF_TIMEOUT = "timeout"
 # When True, periodically inject Daikin hourly energy into recorder LTS (opt-in).
 CONF_AUTO_HISTORY_SYNC = "auto_history_sync"
 # When True, history sync may INSERT missing hourly LTS rows (can conflict with recorder).
 CONF_INSERT_MISSING = "insert_missing"
+
+# BRP069 polling split:
+# - state domain: temperatures/humidity/mode, etc. (sensor/control endpoints)
+# - energy domain: consumption totals and arrays (day/week power endpoints)
+CONF_POLL_INTERVAL_STATE_SEC = "poll_interval_state_sec"
+CONF_POLL_INTERVAL_ENERGY_SEC = "poll_interval_energy_sec"
 
 # History correction window:
 # - skip_extra_hours: number of *additional* most recent local hours to ignore,

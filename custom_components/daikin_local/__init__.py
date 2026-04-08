@@ -7,6 +7,7 @@ import logging
 
 from aiohttp import ClientConnectionError
 from pydaikin.daikin_base import Appliance
+from pydaikin.daikin_brp069 import DaikinBRP069
 from pydaikin.factory import DaikinFactory
 
 from homeassistant.config_entries import ConfigEntry
@@ -17,7 +18,14 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 
-from .const import KEY_MAC, TIMEOUT_SEC, DOMAIN, CONF_HISTORY_SKIP_EXTRA_HOURS
+from .const import (
+    CONF_HISTORY_SKIP_EXTRA_HOURS,
+    DOMAIN,
+    KEY_IS_BRP069,
+    KEY_MAC,
+    KEY_SUPPORTS_ENERGY,
+    TIMEOUT_SEC,
+)
 from .coordinator import DaikinConfigEntry, DaikinCoordinator
 from .services import async_setup_services
 
@@ -100,6 +108,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bo
     except ClientConnectionError as err:
         _LOGGER.debug("ClientConnectionError to %s", host)
         raise ConfigEntryNotReady from err
+
+    # Populate entry flags so OptionsFlow can show relevant fields without requiring reconfigure.
+    is_brp069 = isinstance(device, DaikinBRP069)
+    supports_energy = bool(getattr(device, "support_energy_consumption", False))
+    if (
+        conf.get(KEY_IS_BRP069) != is_brp069
+        or conf.get(KEY_SUPPORTS_ENERGY) != supports_energy
+    ):
+        hass.config_entries.async_update_entry(
+            entry,
+            data={
+                **conf,
+                KEY_IS_BRP069: is_brp069,
+                KEY_SUPPORTS_ENERGY: supports_energy,
+            },
+        )
+        conf = entry.data
 
     coordinator = DaikinCoordinator(hass, entry, device)
 

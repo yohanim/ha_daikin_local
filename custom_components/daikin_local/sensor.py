@@ -151,6 +151,32 @@ SENSOR_TYPES: tuple[DaikinSensorEntityDescription, ...] = (
             else None
         ),
     ),
+    DaikinSensorEntityDescription(
+        key="pydaikin_daily_state_poll_errors",
+        translation_key="pydaikin_daily_state_poll_errors",
+        device_class=None,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=None,
+        entity_registry_enabled_default=False,
+        value_func=lambda data: (
+            data.appliance.coordinator.daily_state_polling_error_count
+            if hasattr(data.appliance, "coordinator")
+            else None
+        ),
+    ),
+    DaikinSensorEntityDescription(
+        key="pydaikin_daily_energy_poll_errors",
+        translation_key="pydaikin_daily_energy_poll_errors",
+        device_class=None,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=None,
+        entity_registry_enabled_default=False,
+        value_func=lambda data: (
+            data.appliance.coordinator.daily_energy_polling_error_count
+            if hasattr(data.appliance, "coordinator")
+            else None
+        ),
+    ),
 )
 
 
@@ -185,6 +211,11 @@ async def async_setup_entry(
             supported = device.support_compressor_frequency
         elif description.key == "pydaikin_daily_poll_errors":
             # Always expose diagnostics sensors; they read from coordinator.
+            supported = True
+        elif description.key in (
+            "pydaikin_daily_state_poll_errors",
+            "pydaikin_daily_energy_poll_errors",
+        ):
             supported = True
 
         if supported:

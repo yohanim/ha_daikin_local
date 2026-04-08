@@ -30,12 +30,14 @@
       "init": {
         "data": {
           "timeout": "Intervalle de rafraîchissement (secondes)",
+          "poll_interval_state_sec": "Intervalle de polling (état) (secondes)",
+          "poll_interval_energy_sec": "Intervalle de polling (énergie) (secondes)",
           "auto_history_sync": "Synchronisation automatique horaire des stats d'énergie (recorder)",
           "insert_missing": "Autoriser l'insertion des créneaux horaires manquants (stats)",
           "history_skip_extra_hours": "Heures supplémentaires à ignorer (l'heure en cours est toujours ignorée)",
           "history_hours_to_correct": "Nombre d'heures précédentes à corriger"
         },
-        "description": "L'intervalle de rafraîchissement ici remplace celui défini à l'ajout si renseigné. La synchro auto d'historique utilise le même rythme que le polling : après chaque lecture réussie des capteurs, une correction LTS est tentée au plus une fois par heure locale (nouvelle tentative au poll suivant si elle échoue). « Insertion manquants » : lors des corrections d'historique, autoriser la création de lignes pour les heures sans donnée (rare conflit avec le recorder ; les actions peuvent surcharger).",
+        "description": "L'intervalle de rafraîchissement ici remplace celui défini à l'ajout si renseigné. Pour les adaptateurs BRP069, le polling peut être séparé en domaines : état (capteurs/contrôle) et énergie (puissance jour/semaine) avec des intervalles distincts. La synchro auto d'historique utilise le même rythme que le polling : après chaque lecture réussie des capteurs, une correction LTS est tentée au plus une fois par heure locale (nouvelle tentative au poll suivant si elle échoue). « Insertion manquants » : lors des corrections d'historique, autoriser la création de lignes pour les heures sans donnée (rare conflit avec le recorder ; les actions peuvent surcharger).",
         "title": "Options Daikin"
       }
     }
@@ -159,6 +161,12 @@
       },
       "pydaikin_daily_poll_errors": {
         "name": "Erreurs quotidiennes de polling pydaikin"
+      },
+      "pydaikin_daily_state_poll_errors": {
+        "name": "Erreurs quotidiennes de polling (état) pydaikin"
+      },
+      "pydaikin_daily_energy_poll_errors": {
+        "name": "Erreurs quotidiennes de polling (énergie) pydaikin"
       },
       "compressor_frequency": {
         "name": "Fréquence du compresseur"

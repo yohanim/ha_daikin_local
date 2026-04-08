@@ -8,6 +8,7 @@ from typing import Any
 
 from aiohttp import ClientError
 from pydaikin.daikin_base import Appliance
+from pydaikin.daikin_brp069 import DaikinBRP069
 from pydaikin.discovery import Discovery
 from pydaikin.exceptions import DaikinException
 from pydaikin.factory import DaikinFactory
@@ -31,9 +32,13 @@ from .const import (
     CONF_HISTORY_HOURS_TO_CORRECT,
     CONF_HISTORY_SKIP_EXTRA_HOURS,
     CONF_INSERT_MISSING,
+    CONF_POLL_INTERVAL_ENERGY_SEC,
+    CONF_POLL_INTERVAL_STATE_SEC,
     CONF_TIMEOUT,
     DOMAIN,
+    KEY_IS_BRP069,
     KEY_MAC,
+    KEY_SUPPORTS_ENERGY,
     TIMEOUT_SEC,
 )
 
@@ -70,6 +75,9 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
         host: str,
         mac: str,
         timeout: int = TIMEOUT_SEC,
+        *,
+        is_brp069: bool = False,
+        supports_energy: bool = False,
     ) -> ConfigFlowResult:
         """Register new entry."""
         if not self.unique_id:
@@ -82,6 +90,8 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
                 CONF_HOST: host,
                 KEY_MAC: mac,
                 CONF_TIMEOUT: timeout,
+                KEY_IS_BRP069: is_brp069,
+                KEY_SUPPORTS_ENERGY: supports_energy,
             },
         )
 
@@ -120,7 +130,13 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
             )
 
         mac = device.mac
-        return await self._create_entry(host, mac, timeout)
+        return await self._create_entry(
+            host,
+            mac,
+            timeout,
+            is_brp069=isinstance(device, DaikinBRP069),
+            supports_energy=bool(device.support_energy_consumption),
+        )
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -186,6 +202,8 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
                         data_updates={
                             CONF_HOST: host,
                             CONF_TIMEOUT: timeout,
+                            KEY_IS_BRP069: isinstance(device, DaikinBRP069),
+                            KEY_SUPPORTS_ENERGY: bool(device.support_energy_consumption),
                         },
                     )
 
@@ -223,6 +241,10 @@ class OptionsFlowHandler(OptionsFlow):
             merged = {**self.config_entry.options, **user_input}
             return self.async_create_entry(title="", data=merged)
 
+        show_domain_polling = bool(
+            self.config_entry.data.get(KEY_IS_BRP069)
+            and self.config_entry.data.get(KEY_SUPPORTS_ENERGY)
+        )
         suggested = {
             CONF_TIMEOUT: self.config_entry.options.get(CONF_TIMEOUT)
             or self.config_entry.data.get(CONF_TIMEOUT, TIMEOUT_SEC),
@@ -239,40 +261,85 @@ class OptionsFlowHandler(OptionsFlow):
                 CONF_HISTORY_HOURS_TO_CORRECT, 3
             ),
         }
+
+        schema_dict: dict = {
+            vol.Optional(CONF_TIMEOUT, default=TIMEOUT_SEC): int,
+        }
+        if show_domain_polling:
+            suggested.update(
+                {
+                    CONF_POLL_INTERVAL_STATE_SEC: self.config_entry.options.get(
+                        CONF_POLL_INTERVAL_STATE_SEC, 900
+                    ),
+                    CONF_POLL_INTERVAL_ENERGY_SEC: self.config_entry.options.get(
+                        CONF_POLL_INTERVAL_ENERGY_SEC, 90
+                    ),
+                }
+            )
+            schema_dict.update(
+                {
+                    vol.Optional(
+                        CONF_POLL_INTERVAL_STATE_SEC,
+                        default=900,
+                    ): selector.NumberSelector(
+                        {
+                            "min": 30,
+                            "max": 3600,
+                            "step": 30,
+                            "mode": "box",
+                            "unit_of_measurement": "s",
+                        }
+                    ),
+                    vol.Optional(
+                        CONF_POLL_INTERVAL_ENERGY_SEC,
+                        default=90,
+                    ): selector.NumberSelector(
+                        {
+                            "min": 30,
+                            "max": 3600,
+                            "step": 30,
+                            "mode": "box",
+                            "unit_of_measurement": "s",
+                        }
+                    ),
+                }
+            )
+
+        schema_dict.update(
+            {
+                vol.Optional(CONF_AUTO_HISTORY_SYNC, default=False): cv.boolean,
+                vol.Optional(CONF_INSERT_MISSING, default=False): cv.boolean,
+                vol.Optional(
+                    CONF_HISTORY_SKIP_EXTRA_HOURS,
+                    default=1,
+                ): selector.NumberSelector(
+                    {
+                        "min": 1,
+                        "max": 12,
+                        "step": 1,
+                        "mode": "slider",
+                        "unit_of_measurement": "h",
+                    }
+                ),
+                vol.Optional(
+                    CONF_HISTORY_HOURS_TO_CORRECT,
+                    default=3,
+                ): selector.NumberSelector(
+                    {
+                        "min": 1,
+                        "max": 24,
+                        "step": 1,
+                        "mode": "slider",
+                        "unit_of_measurement": "h",
+                    }
+                ),
+            }
+        )
+
         return self.async_show_form(
             step_id="init",
             data_schema=self.add_suggested_values_to_schema(
-                vol.Schema(
-                    {
-                        vol.Optional(CONF_TIMEOUT, default=TIMEOUT_SEC): int,
-                        vol.Optional(CONF_AUTO_HISTORY_SYNC, default=False): cv.boolean,
-                        vol.Optional(CONF_INSERT_MISSING, default=False): cv.boolean,
-                        vol.Optional(
-                            CONF_HISTORY_SKIP_EXTRA_HOURS,
-                            default=1,
-                        ): selector.NumberSelector(
-                            {
-                                "min": 1,
-                                "max": 12,
-                                "step": 1,
-                                "mode": "slider",
-                                "unit_of_measurement": "h",
-                            }
-                        ),
-                        vol.Optional(
-                            CONF_HISTORY_HOURS_TO_CORRECT,
-                            default=3,
-                        ): selector.NumberSelector(
-                            {
-                                "min": 1,
-                                "max": 24,
-                                "step": 1,
-                                "mode": "slider",
-                                "unit_of_measurement": "h",
-                            }
-                        ),
-                    }
-                ),
+                vol.Schema(schema_dict),
                 suggested,
             ),
         )
