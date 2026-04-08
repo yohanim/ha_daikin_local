@@ -44,6 +44,25 @@
       }
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "timeout": "Intervalle de rafraîchissement (secondes)",
+          "energy_group_id": "Identifiant de groupe énergie (optionnel)",
+          "energy_group_total_history_master": "Maître pour la correction du total (groupe énergie)",
+          "poll_interval_state_sec": "Intervalle de polling (état) (secondes)",
+          "poll_interval_energy_sec": "Intervalle de polling (énergie) (secondes)",
+          "auto_history_sync": "Synchronisation automatique horaire des stats d'énergie (recorder)",
+          "insert_missing": "Autoriser l'insertion des créneaux horaires manquants (stats)",
+          "history_skip_extra_hours": "Heures supplémentaires à ignorer (l'heure en cours est toujours ignorée)",
+          "history_hours_to_correct": "Nombre d'heures précédentes à corriger"
+        },
+        "description": "Gérer les options de Daikin Local.",
+        "title": "Options Daikin"
+      }
+    }
+  },
   "services": {
     "sync_history": {
       "name": "Synchroniser l'historique d'énergie",

@@ -44,6 +44,25 @@
       }
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "timeout": "Polling interval (seconds)",
+          "energy_group_id": "Energy group id (optional)",
+          "energy_group_total_history_master": "Total history master for this energy group",
+          "poll_interval_state_sec": "State polling interval (seconds)",
+          "poll_interval_energy_sec": "Energy polling interval (seconds)",
+          "auto_history_sync": "Hourly auto-sync of energy statistics to the recorder",
+          "insert_missing": "Allow inserting missing hourly statistics rows",
+          "history_skip_extra_hours": "Additional hours to skip (current hour is always skipped)",
+          "history_hours_to_correct": "Number of previous hours to correct"
+        },
+        "description": "Manage Daikin Local options.",
+        "title": "Daikin AC options"
+      }
+    }
+  },
   "services": {
     "sync_history": {
       "name": "Sync energy history",
