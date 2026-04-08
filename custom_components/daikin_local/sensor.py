@@ -89,6 +89,7 @@ SENSOR_TYPES: tuple[DaikinSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        entity_registry_enabled_default=False,
         value_func=lambda data: round(
             data.appliance.current_total_power_consumption, 2
         ),

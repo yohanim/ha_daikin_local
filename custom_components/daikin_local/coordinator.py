@@ -23,6 +23,7 @@ from .const import (
     ATTR_ENERGY_TODAY,
     ATTR_HEAT_ENERGY,
     ATTR_TOTAL_ENERGY_TODAY,
+    ATTR_TOTAL_POWER,
     CONF_AUTO_HISTORY_SYNC,
     CONF_HISTORY_HOURS_TO_CORRECT,
     CONF_HISTORY_SKIP_EXTRA_HOURS,
@@ -248,6 +249,8 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         self._integrated_total_energy = 0
         self._last_update_time = None
         self._last_power = 0
+        self._total_power_enabled_cached: bool | None = None
+        self._total_power_enabled_checked_mono: float | None = None
         self._brp069_state_interval_s = state_interval_s
         self._brp069_energy_interval_s = energy_interval_s
         self._brp069_last_state_poll_mono: float | None = None
@@ -269,6 +272,33 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         self._history_backfill_extra_hour = False
         # Prevent concurrent history imports into recorder statistics.
         self._history_sync_lock = asyncio.Lock()
+
+    def _total_power_entity_enabled(self, *, now_mono: float) -> bool:
+        """Return True if the total_power entity exists and is enabled.
+
+        Avoids repeatedly triggering pydaikin's slope-based power estimation (which can
+        spam logs on inconsistent `datas` sequences) when the sensor is disabled.
+        """
+        # Cache for 10 minutes to avoid frequent registry lookups.
+        if (
+            self._total_power_enabled_cached is not None
+            and self._total_power_enabled_checked_mono is not None
+            and (now_mono - self._total_power_enabled_checked_mono) < 600
+        ):
+            return self._total_power_enabled_cached
+
+        ent_reg = er.async_get(self.hass)
+        unique_id = f"{self.device.mac}-{ATTR_TOTAL_POWER}"
+        entity_id = ent_reg.async_get_entity_id("sensor", DOMAIN, unique_id)
+        if not entity_id:
+            enabled = False
+        else:
+            entry = ent_reg.async_get(entity_id)
+            enabled = bool(entry is not None and entry.disabled_by is None)
+
+        self._total_power_enabled_cached = enabled
+        self._total_power_enabled_checked_mono = now_mono
+        return enabled
 
     async def async_load_error_stats(self) -> None:
         """Restore daily poll error counts from storage (same local calendar day)."""
@@ -497,8 +527,20 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         self._consecutive_poll_failures = 0
         self._poll_cooldown_until = None
 
-        # Energy smoothing logic
-        current_power = getattr(self.device, "current_total_power_consumption", 0) or 0
+        # Power estimation (pydaikin slope) can be noisy when total counters are inconsistent.
+        # For BRP069, compute it only on energy refresh ticks and only if the entity is enabled.
+        if isinstance(self.device, DaikinBRP069):
+            compute_power = brp069_energy_attempted and self._total_power_entity_enabled(
+                now_mono=now_mono
+            )
+        else:
+            compute_power = True
+
+        current_power = (
+            (getattr(self.device, "current_total_power_consumption", 0) or 0)
+            if compute_power
+            else (self._last_power or 0)
+        )
 
         # Use property for smoothing if available, fallback to history sum
         real_total_energy_today = (
