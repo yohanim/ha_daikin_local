@@ -1,0 +1,6 @@
+# Minimal deps to run unit tests on Windows without installing Home Assistant.
+#   pip install -r requirements_local_tests.txt
+#   pytest -m "not requires_ha"
+#
+# (``voluptuous`` is also pulled in by ``homeassistant`` when using requirements_test.txt.)
+voluptuous>=0.15.0

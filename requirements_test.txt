@@ -1,0 +1,17 @@
+# Full integration test stack (Home Assistant + harness). See also
+# requirements_local_tests.txt for Windows/local runs without homeassistant.
+#
+# Install:  python -m pip install -r requirements_test.txt
+# Run:      pytest
+#
+# Full stack (Home Assistant test harness): use Linux, macOS, or WSL2. On Windows
+# with only the Microsoft Store Python, pip may try to build native wheels
+# (e.g. lru-dict) and require "Microsoft C++ Build Tools". In that case either
+# install the build tools, use WSL, or run the same pip+pytest in GitHub Actions.
+#
+# Pin tracks homeassistant used by pytest-homeassistant-custom-component; bump
+# when you bump hacs.json / Core target (see PyPI release notes for the package).
+pytest-homeassistant-custom-component==0.13.320
+
+# Same pin as ``custom_components/daikin_local/manifest.json`` (coordinator imports pydaikin).
+pydaikin==2.18.1

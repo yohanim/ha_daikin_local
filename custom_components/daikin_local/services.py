@@ -3,10 +3,7 @@ from __future__ import annotations
 
 import logging
 
-import voluptuous as vol
-
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
@@ -20,23 +17,18 @@ from .const import (
     CONF_INSERT_MISSING,
     DOMAIN,
 )
+from .pure import (
+    ATTR_DAYS_AGO,
+    ATTR_ENTITY_ID,
+    build_service_schema,
+    group_has_master as _group_has_master,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 SERVICE_SYNC_HISTORY = "sync_history"
 SERVICE_SYNC_TOTAL_HISTORY = "sync_total_history"
-ATTR_DAYS_AGO = "days_ago"
-SERVICE_SCHEMA = vol.Schema(
-    {
-        vol.Optional(ATTR_DAYS_AGO, default=0): vol.All(
-            vol.Coerce(int), vol.Range(min=0, max=1)
-        ),
-        vol.Optional(ATTR_ENTITY_ID): vol.Coerce(str),
-        vol.Optional(CONF_INSERT_MISSING): cv.boolean,
-        vol.Optional(CONF_HISTORY_SKIP_EXTRA_HOURS): vol.Coerce(int),
-        vol.Optional(CONF_HISTORY_HOURS_TO_CORRECT): vol.Coerce(int),
-    }
-)
+SERVICE_SCHEMA = build_service_schema(cv.boolean)
 
 
 def _loaded_config_entries(hass: HomeAssistant) -> list[ConfigEntry]:
@@ -93,18 +85,6 @@ def _entries_for_entity_target(
         )
         return []
     return [entry]
-
-
-def _group_has_master(entries: list[ConfigEntry], group: str) -> bool:
-    """True if some loaded entry marks itself master for this non-empty group id."""
-    g = group.strip()
-    if not g:
-        return False
-    return any(
-        (e.options.get(CONF_ENERGY_GROUP_ID) or "").strip() == g
-        and bool(e.options.get(CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER, False))
-        for e in entries
-    )
 
 
 def _total_energy_sensor_enabled(hass: HomeAssistant, entry: ConfigEntry) -> bool:

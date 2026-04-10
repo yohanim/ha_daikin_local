@@ -25,16 +25,17 @@ from .const import (
     ATTR_TOTAL_ENERGY_TODAY,
     ATTR_TOTAL_POWER,
     CONF_AUTO_HISTORY_SYNC,
-    CONF_CONNECTION_TIMEOUT,
     CONF_ENERGY_GROUP_ID,
-    CONF_HISTORY_HOURS_TO_CORRECT,
-    CONF_HISTORY_SKIP_EXTRA_HOURS,
     CONF_INSERT_MISSING,
-    CONF_POLL_INTERVAL_ENERGY_SEC,
-    CONF_POLL_INTERVAL_SEC,
-    CONF_POLL_INTERVAL_STATE_SEC,
     DOMAIN,
-    TIMEOUT_SEC,
+)
+from .pure import (
+    connection_timeout_sec,
+    coordinator_poll_interval_sec,
+    domain_poll_intervals_sec,
+    history_window_from_entry_and_overrides as _history_window_from_entry_and_overrides,
+    lts_row_start_to_datetime_non_str,
+    recent_completed_hours_by_local_date as _recent_completed_hours_by_local_date_pure,
 )
 from .utils import calculate_energy_sum, parse_daikin_list
 
@@ -100,126 +101,39 @@ def _recent_completed_hours_by_local_date(
     skip_hours: int = 2,
     hours_to_correct: int = 3,
     clamp: bool = True,
-) -> dict[datetime.date, set[int]]:
-    """Hour indices for completed local hours to (re)inject.
-
-    We intentionally exclude:
-    - the current hour (hour in progress)
-    - the previous hour
-
-    ``skip_hours``: number of most recent hours to skip counting backwards from
-    "now" and including the current hour. Default 2 = skip current+previous hour.
-
-    ``hours_to_correct``: number of hourly slots to correct immediately before the
-    skipped range. Default 3 with skip_hours=2 targets hours back {2,3,4}.
-
-    When ``include_extra_hour`` is True, we correct one additional hour (i.e.
-    ``hours_to_correct + 1``). This is used after a history-sync failure so we
-    can "catch up" one missed slot later.
-
-    When ``clamp`` is False, ``skip_hours`` and ``hours_to_correct`` are used as
-    given (service-call overrides); otherwise they are clamped to at least 1.
-    """
-    if clamp:
-        skip_hours = max(1, int(skip_hours))
-        hours_to_correct = max(1, int(hours_to_correct))
-    else:
-        skip_hours = int(skip_hours)
-        hours_to_correct = int(hours_to_correct)
-
-    now_local = dt_util.as_local(dt_util.utcnow())
-    mapping: dict[datetime.date, set[int]] = {}
-    extra = 1 if include_extra_hour else 0
-    for i in range(hours_to_correct + extra):
-        t = now_local - timedelta(hours=skip_hours + i)
-        mapping.setdefault(t.date(), set()).add(t.hour)
-    return mapping
-
-
-def _history_skip_hours_from_options(options: dict) -> int:
-    """Compute total hours to skip (includes current hour).
-
-    New option: history_skip_extra_hours (extra hours besides current hour).
-    Legacy option (kept for backward compat): history_skip_hours (included current hour).
-    """
-    if CONF_HISTORY_SKIP_EXTRA_HOURS in options:
-        extra = int(options.get(CONF_HISTORY_SKIP_EXTRA_HOURS) or 0)
-        return max(1, 1 + extra)
-
-    # Backward compat: old meaning was total skip including current hour.
-    legacy_total = int(options.get("history_skip_hours") or 2)
-    return max(1, legacy_total)
-
-
-def _history_window_from_entry_and_overrides(
-    options: dict,
-    *,
-    history_skip_extra_hours: int | None,
-    history_hours_to_correct: int | None,
-) -> tuple[int, int, bool]:
-    """Resolve skip/correct window for history imports.
-
-    Returns ``(skip_hours, hours_to_correct, clamp)``. When either service
-    override is set, ``clamp`` is False so values are passed through to
-    :func:`_recent_completed_hours_by_local_date` without forcing a minimum of 1.
-    """
-    override = (
-        history_skip_extra_hours is not None or history_hours_to_correct is not None
+) -> dict[date, set[int]]:
+    """Hour indices for completed local hours (delegates to :mod:`.pure`)."""
+    return _recent_completed_hours_by_local_date_pure(
+        dt_util.as_local(dt_util.utcnow()),
+        include_extra_hour=include_extra_hour,
+        skip_hours=skip_hours,
+        hours_to_correct=hours_to_correct,
+        clamp=clamp,
     )
-    clamp = not override
-    if history_skip_extra_hours is not None:
-        skip_hours = 1 + int(history_skip_extra_hours)
-    else:
-        skip_hours = _history_skip_hours_from_options(options)
-    if history_hours_to_correct is not None:
-        hours_to_correct = int(history_hours_to_correct)
-    else:
-        hours_to_correct = int(options.get(CONF_HISTORY_HOURS_TO_CORRECT, 3))
-    return skip_hours, hours_to_correct, clamp
 
 
 def _lts_row_start_to_datetime(
     start: datetime | str | float | int | None,
 ) -> datetime | None:
-    """Convert recorder LTS row ``start`` to a datetime.
-
-    Newer Home Assistant returns Unix timestamps (float/int) for ``start``;
-    older code paths used ISO strings or datetime objects.
-    """
-    if start is None:
-        return None
-    if isinstance(start, datetime):
-        return start
+    """Convert recorder LTS row ``start`` to a datetime."""
     if isinstance(start, str):
         return dt_util.parse_datetime(start)
-    if isinstance(start, (int, float)):
-        return dt_util.utc_from_timestamp(float(start))
-    return None
+    return lts_row_start_to_datetime_non_str(start)
 
 
 def _connection_timeout_sec(entry: ConfigEntry) -> int:
     """HTTP request timeout (seconds): options override data when set."""
-    return (
-        entry.options.get(CONF_CONNECTION_TIMEOUT)
-        or entry.data.get(CONF_CONNECTION_TIMEOUT)
-        or TIMEOUT_SEC
-    )
+    return connection_timeout_sec(entry.data, entry.options)
 
 
 def _coordinator_poll_interval_sec(entry: ConfigEntry) -> int:
     """Coordinator tick when not scheduled by BRP069 energy cadence (seconds)."""
-    return (
-        entry.options.get(CONF_POLL_INTERVAL_SEC)
-        or entry.data.get(CONF_POLL_INTERVAL_SEC)
-        or TIMEOUT_SEC
-    )
+    return coordinator_poll_interval_sec(entry.data, entry.options)
 
 
 def _domain_poll_intervals_sec(entry: ConfigEntry) -> tuple[int, int]:
     """Return (state_interval_s, energy_interval_s) for BRP069 domain polling."""
-    state_s = int(entry.options.get(CONF_POLL_INTERVAL_STATE_SEC) or 900)
-    energy_s = int(entry.options.get(CONF_POLL_INTERVAL_ENERGY_SEC) or 90)
-    return state_s, energy_s
+    return domain_poll_intervals_sec(entry.options)
 
 
 @dataclass
