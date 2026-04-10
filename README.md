@@ -12,6 +12,7 @@ A custom integration for Home Assistant to locally control Daikin air conditione
   - **Manual correction**: Services `daikin_local.sync_history` and `daikin_local.sync_total_history` to backfill or fix delayed Daikin data on demand.
 - **Diagnostics**:
   - Per-device **daily error counters** for pydaikin communication (disabled by default in the entity registry): `pydaikin_daily_poll_errors`, plus BRP069 per-domain counters `pydaikin_daily_state_poll_errors` and `pydaikin_daily_energy_poll_errors`.
+  - **Integration diagnostics** (Home Assistant **Download diagnostics** on the integration or device): redacted config/options plus coordinator runtime (intervals, error counts, firmware/model hints). See [Integration diagnostics](https://developers.home-assistant.io/docs/core/integration_diagnostics/).
 - **Clear default entity IDs**: For **new** devices and **new** installations, `suggested_object_id` is only the **suffix** (sensor key, `hvac`, `zone_N`, …). Home Assistant then builds `sensor.<device_slug>_<suffix>` (e.g. `sensor.salon_humidity`), so the device name is **not** duplicated in the `entity_id`.
 - **Advanced Functions**: Support for Streamer mode, Powerful (Boost), and Econo modes.
 - **Instant Feedback**: State updates immediately in the UI after any setting change (no more waiting for the 30s refresh cycle).

@@ -14,8 +14,6 @@ class DaikinEntity(CoordinatorEntity[DaikinCoordinator]):
     def __init__(self, coordinator: DaikinCoordinator) -> None:
         """Initialize the entity."""
         super().__init__(coordinator)
-        # Attach a back-reference for diagnostics sensors that need coordinator stats.
-        setattr(coordinator.device, "coordinator", coordinator)
         self.device = coordinator.device
         info = self.device.values
         self._attr_device_info = DeviceInfo(

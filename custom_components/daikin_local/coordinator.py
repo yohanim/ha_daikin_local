@@ -224,7 +224,7 @@ def _domain_poll_intervals_sec(entry: ConfigEntry) -> tuple[int, int]:
 
 @dataclass
 class DaikinData:
-    """Class to hold Daikin data."""
+    """Snapshot of appliance-derived state after each successful coordinator refresh."""
 
     appliance: Appliance
     calculated_total_energy_today: float
@@ -383,6 +383,28 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
     def daily_energy_polling_error_count(self) -> int:
         """Errors while polling the energy domain (per local day)."""
         return self._daily_energy_poll_error_count
+
+    @property
+    def consecutive_communication_failures(self) -> int:
+        """Failed update attempts in a row; reset to 0 after a successful refresh."""
+        return self._consecutive_poll_failures
+
+    @property
+    def state_domain_interval_seconds(self) -> int:
+        """BRP069 state-domain scheduling interval (also stored for non-BRP069)."""
+        return self._brp069_state_interval_s
+
+    @property
+    def energy_domain_interval_seconds(self) -> int:
+        """BRP069 energy-domain scheduling interval (also stored for non-BRP069)."""
+        return self._brp069_energy_interval_s
+
+    @property
+    def poll_cooldown_until_iso(self) -> str | None:
+        """When set, coordinator skips refresh until this UTC time (ISO 8601)."""
+        if self._poll_cooldown_until is None:
+            return None
+        return self._poll_cooldown_until.isoformat()
 
     def _ensure_error_stats_date(self) -> bool:
         """Reset per-day error counters when the local date changes.

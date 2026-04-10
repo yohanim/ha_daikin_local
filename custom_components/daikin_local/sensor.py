@@ -39,9 +39,16 @@ from .entity import DaikinEntity
 
 @dataclass(frozen=True, kw_only=True)
 class DaikinSensorEntityDescription(SensorEntityDescription):
-    """Describes Daikin sensor entity."""
+    """Describes Daikin sensor entity backed by coordinator data snapshot."""
 
     value_func: Callable[[DaikinData], float | None]
+
+
+@dataclass(frozen=True, kw_only=True)
+class DaikinDiagnosticSensorEntityDescription(SensorEntityDescription):
+    """Diagnostics: integer counters read live from the coordinator (not from DaikinData)."""
+
+    value_from_coordinator: Callable[[DaikinCoordinator], int]
 
 
 SENSOR_TYPES: tuple[DaikinSensorEntityDescription, ...] = (
@@ -138,45 +145,35 @@ SENSOR_TYPES: tuple[DaikinSensorEntityDescription, ...] = (
         entity_registry_enabled_default=False,
         value_func=lambda data: round(data.calculated_total_energy_today, 2),
     ),
-    # Diagnostics: per-day pydaikin communication errors.
-    DaikinSensorEntityDescription(
+)
+
+DIAGNOSTIC_SENSOR_TYPES: tuple[DaikinDiagnosticSensorEntityDescription, ...] = (
+    DaikinDiagnosticSensorEntityDescription(
         key="pydaikin_daily_poll_errors",
         translation_key="pydaikin_daily_poll_errors",
         device_class=None,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=None,
         entity_registry_enabled_default=False,
-        value_func=lambda data: (
-            data.appliance.coordinator.daily_polling_error_count
-            if hasattr(data.appliance, "coordinator")
-            else None
-        ),
+        value_from_coordinator=lambda c: c.daily_polling_error_count,
     ),
-    DaikinSensorEntityDescription(
+    DaikinDiagnosticSensorEntityDescription(
         key="pydaikin_daily_state_poll_errors",
         translation_key="pydaikin_daily_state_poll_errors",
         device_class=None,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=None,
         entity_registry_enabled_default=False,
-        value_func=lambda data: (
-            data.appliance.coordinator.daily_state_polling_error_count
-            if hasattr(data.appliance, "coordinator")
-            else None
-        ),
+        value_from_coordinator=lambda c: c.daily_state_polling_error_count,
     ),
-    DaikinSensorEntityDescription(
+    DaikinDiagnosticSensorEntityDescription(
         key="pydaikin_daily_energy_poll_errors",
         translation_key="pydaikin_daily_energy_poll_errors",
         device_class=None,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=None,
         entity_registry_enabled_default=False,
-        value_func=lambda data: (
-            data.appliance.coordinator.daily_energy_polling_error_count
-            if hasattr(data.appliance, "coordinator")
-            else None
-        ),
+        value_from_coordinator=lambda c: c.daily_energy_polling_error_count,
     ),
 )
 
@@ -189,8 +186,8 @@ async def async_setup_entry(
     """Set up Daikin climate based on config_entry."""
     coordinator = entry.runtime_data
     device = coordinator.device
-    
-    entities: list[DaikinSensor] = []
+
+    entities: list[DaikinSensor | DaikinDiagnosticSensor] = []
 
     for description in SENSOR_TYPES:
         supported = False
@@ -210,17 +207,12 @@ async def async_setup_entry(
             supported = device.support_humidity
         elif description.key == ATTR_COMPRESSOR_FREQUENCY:
             supported = device.support_compressor_frequency
-        elif description.key == "pydaikin_daily_poll_errors":
-            # Always expose diagnostics sensors; they read from coordinator.
-            supported = True
-        elif description.key in (
-            "pydaikin_daily_state_poll_errors",
-            "pydaikin_daily_energy_poll_errors",
-        ):
-            supported = True
 
         if supported:
             entities.append(DaikinSensor(coordinator, description))
+
+    for description in DIAGNOSTIC_SENSOR_TYPES:
+        entities.append(DaikinDiagnosticSensor(coordinator, description))
 
     async_add_entities(entities)
 
@@ -231,7 +223,9 @@ class DaikinSensor(DaikinEntity, SensorEntity):
     entity_description: DaikinSensorEntityDescription
 
     def __init__(
-        self, coordinator: DaikinCoordinator, description: DaikinSensorEntityDescription
+        self,
+        coordinator: DaikinCoordinator,
+        description: DaikinSensorEntityDescription,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
@@ -248,4 +242,33 @@ class DaikinSensor(DaikinEntity, SensorEntity):
     @property
     def native_value(self) -> float | None:
         """Return the state of the sensor."""
+        if self.coordinator.data is None:
+            return None
         return self.entity_description.value_func(self.coordinator.data)
+
+
+class DaikinDiagnosticSensor(DaikinEntity, SensorEntity):
+    """Diagnostics counters: values come from the coordinator, not the data snapshot."""
+
+    entity_description: DaikinDiagnosticSensorEntityDescription
+
+    def __init__(
+        self,
+        coordinator: DaikinCoordinator,
+        description: DaikinDiagnosticSensorEntityDescription,
+    ) -> None:
+        """Initialize the diagnostic sensor."""
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._attr_unique_id = f"{self.device.mac}-{description.key}"
+        self._attr_translation_key = description.translation_key
+
+    @property
+    def suggested_object_id(self) -> str | None:
+        """Suffix only: HA prepends device slug."""
+        return self.entity_description.key
+
+    @property
+    def native_value(self) -> int:
+        """Return the current diagnostic counter (always defined; defaults apply before first poll)."""
+        return self.entity_description.value_from_coordinator(self.coordinator)
