@@ -50,6 +50,20 @@ PLATFORMS = [Platform.CLIMATE, Platform.SENSOR, Platform.SWITCH]
 _OBSOLETE_CONFIG_KEYS = frozenset({"api_key", "password", "uuid"})
 _LEGACY_OPTION_SKIP_HOURS = "history_skip_hours"
 
+# Experimental Onecta cloud fan branch only; strip if present after downgrade to main.
+_DEPRECATED_ONECTA_KEYS = frozenset(
+    {
+        "onecta_cloud_fan_enabled",
+        "onecta_gateway_device_id",
+        "onecta_climate_embedded_id",
+        "onecta_oauth_credential",
+        "onecta_client_id",
+        "onecta_client_secret",
+        "onecta_refresh_token",
+        "onecta_start_oauth",
+    }
+)
+
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Migrate config entries (matches config_flow FlowHandler.VERSION)."""
@@ -106,6 +120,26 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             data=data,
             options=options,
             version=5,
+        )
+        return True
+
+    # v5 -> v6: remove experimental Onecta cloud fan keys (not supported on main)
+    if entry.version == 5:
+        data = {
+            k: v
+            for k, v in entry.data.items()
+            if k not in _DEPRECATED_ONECTA_KEYS
+        }
+        options = {
+            k: v
+            for k, v in entry.options.items()
+            if k not in _DEPRECATED_ONECTA_KEYS
+        }
+        hass.config_entries.async_update_entry(
+            entry,
+            data=data,
+            options=options,
+            version=6,
         )
         return True
 

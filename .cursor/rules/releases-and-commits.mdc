@@ -1,0 +1,52 @@
+---
+description: Commit messages (short + long), English releases, version/hassfest notes, bilingual release notes
+alwaysApply: true
+---
+
+# Commits and releases (language and format)
+
+## Git commit messages
+
+- Write **commit messages in English** (subject and body).
+- Use **imperative mood** for the subject line (e.g. `Fix OAuth redirect`, not `Fixed`).
+- When proposing a commit, always give **two variants**:
+  1. **Short (one line):** a single subject line only, suitable for `git commit -m "..."`.
+  2. **Long (multi-line):** a **subject line** (≤ ~72 chars), then a **blank line**, then a **body** with one or more paragraphs explaining what changed and why; suitable for `git commit` with editor or `-m subject -m body`.
+
+Example structure for the long form:
+
+```text
+chore: add Cursor rules for commits and releases
+
+Document short/long commit format, hassfest-safe manifest versions, and
+bilingual release notes. Bump manifest to 1.6.1.
+```
+
+## Version numbers (manifest, tags, release titles)
+
+- **`manifest.json` `version`**: must pass **Home Assistant hassfest** (AwesomeVersion / PEP 440). Use standard pre-release forms such as **`1.7.0b14`**, **`1.7.1`**. Do **not** use padded segment forms like **`1.07.00b14`** — they fail manifest validation.
+- **Tags / release titles**: you may still prefer **two-digit beta suffixes** for readability (`b01`, `b09`, `b14`) where helpful; keep **manifest** on hassfest-safe strings.
+- Optional style elsewhere (not in manifest): emphasize clarity in release notes (e.g. “beta 14”).
+
+## Release titles (GitHub / tags)
+
+- Write **release titles in English**.
+- When a version appears in a title, keep it consistent with the manifest or tag you publish.
+
+## Release notes
+
+- Write release notes as **Markdown**.
+- Produce **one single message** that contains **both** the English and French versions so the user can copy-paste once (e.g. into GitHub Releases).
+- Structure: clear headings or sections for each language, for example:
+
+```markdown
+## English
+
+- Bullet or short paragraph for changes.
+
+## Français
+
+- Puce ou court paragraphe pour les mêmes changements.
+```
+
+- Keep EN and FR **aligned** (same scope of information); avoid duplicating unrelated content between sections.

@@ -1,0 +1,38 @@
+---
+description: Run project validations before finishing; do not stop until checks pass or failures are fixed
+alwaysApply: true
+---
+
+# Run validations before stopping
+
+After **substantive code or config changes** (not for trivial doc-only edits unless requested), **run the same checks CI uses** and address failures before considering the task complete.
+
+## Commands (repo root)
+
+1. **Ruff (lint)** — matches `.github/workflows/validate.yml` `lint` job:
+
+   ```bash
+   ruff check .
+   ```
+
+2. **Pytest** — full suite when `requirements_test.txt` is installed:
+
+   ```bash
+   python -m pytest -q
+   ```
+
+   If the full HA stack is not installed locally, use the **minimal** local set (Windows CI parity):
+
+   ```bash
+   pip install -r requirements_local_tests.txt pytest
+   pytest -m "not requires_ha" -q
+   ```
+
+## What “done” means
+
+- Do **not** treat the work as finished while **ruff** or **pytest** still report errors introduced by the change set.
+- If a failure is **pre-existing** or **environment-specific**, say so explicitly and either fix it or document the limitation; do not silently ignore red checks.
+
+## When to skip
+
+- Skip running these only for **pure documentation** or **comment-only** edits unless the user asks for validation, or when the environment cannot run Python (then state that limitation).

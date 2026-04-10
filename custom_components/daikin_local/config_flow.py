@@ -51,7 +51,7 @@ _LOGGER = logging.getLogger(__name__)
 class FlowHandler(ConfigFlow, domain=DOMAIN):
     """Handle a config flow."""
 
-    VERSION = 5
+    VERSION = 6
 
     def __init__(self) -> None:
         """Initialize the Daikin config flow."""
