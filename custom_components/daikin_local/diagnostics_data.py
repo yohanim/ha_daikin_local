@@ -18,7 +18,6 @@ from homeassistant.helpers.device_registry import (
 from .const import (
     CONF_ENERGY_GROUP_ID,
     CONF_HOST,
-    DOMAIN,
     KEY_IS_BRP069,
     KEY_MAC,
     KEY_SUPPORTS_ENERGY,

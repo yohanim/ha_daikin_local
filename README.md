@@ -7,7 +7,7 @@ A custom integration for Home Assistant to locally control Daikin air conditione
 - **Full Climate Control**: Mode (Heat, Cool, Dry, Auto, Fan Only), target temperature, fan speed, and swing modes.
 - **Zone Management**: Full support for ducted systems with individual zone control (On/Off and temperature if supported).
 - **Energy Management**: 
-  - **Segmented tracking**: Heat / cool / total energy sensors per unit with `state_class=total_increasing` where applicable.
+  - **Segmented tracking**: Heat / cool / total energy sensors per unit with `state_class=total_increasing` where applicable; daily kWh counters also expose **`last_reset`** at local midnight for Energy / recorder consistency.
   - **Optional auto history sync** (off by default): reuses Daikin hourly data to correct recent long-term statistics **once per local hour**, integrated into the normal polling loop.
   - **Manual correction**: Services `daikin_local.sync_history` and `daikin_local.sync_total_history` to backfill or fix delayed Daikin data on demand.
 - **Diagnostics**:
@@ -90,9 +90,9 @@ Options:
 
 - **`energy_group_id`** (optional): assign the same group id (e.g. `PAC_1`) to all entries that belong to the same physical system.  
   This group id is used to **scope the fallback aggregation** for total history correction: when rebuilding a total series by summing cool+heat, only devices from the same group are included.  
-  If `energy_group_id` is empty, only **ungrouped** entries are aggregated (grouped entries are excluded).
+  If `energy_group_id` is empty, the fallback **sums every entry that also has an empty `energy_group_id`** (the “ungrouped” pool); entries with a non-empty group id are never mixed into that sum.
 - **`energy_group_total_history_master`** (optional): mark exactly one entry per group as the **master**.  
-  When any entry in a group is marked master, the `daikin_local.sync_total_history` service runs only on the group’s master entry to avoid duplicate corrections.
+  For **`daikin_local.sync_total_history`** without `entity_id`: if at least one entry in a group is marked master, the service runs **only on masters** for that group. If **no** master is set for that group, **or** for ungrouped entries, the service runs only on entries whose **compressor total energy** sensor (`compressor_energy_consumption` / `total_energy_today`) exists in the entity registry **and is not disabled** — so disabled totals are skipped and you avoid useless work.
 
 **Integration options** also set the default for **insert missing hourly rows** when running `sync_history` / `sync_total_history` without the `insert_missing` parameter; you can still override per service call.
 

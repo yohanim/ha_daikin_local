@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime
 from dataclasses import dataclass
 
 from homeassistant.components.sensor import (
@@ -20,6 +21,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.util import dt as dt_util
 
 from .const import (
     ATTR_COMPRESSOR_FREQUENCY,
@@ -35,6 +37,16 @@ from .const import (
 )
 from .coordinator import DaikinConfigEntry, DaikinCoordinator, DaikinData
 from .entity import DaikinEntity
+
+# Daikin "today" kWh counters reset at local midnight; expose last_reset for recorder/energy.
+_LOCAL_DAY_ENERGY_KEYS: frozenset[str] = frozenset(
+    {
+        ATTR_ENERGY_TODAY,
+        ATTR_COOL_ENERGY,
+        ATTR_HEAT_ENERGY,
+        ATTR_TOTAL_ENERGY_TODAY,
+    }
+)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -245,6 +257,13 @@ class DaikinSensor(DaikinEntity, SensorEntity):
         if self.coordinator.data is None:
             return None
         return self.entity_description.value_func(self.coordinator.data)
+
+    @property
+    def last_reset(self) -> datetime | None:
+        """Local midnight for daily energy totals (total_increasing with daily reset)."""
+        if self.entity_description.key not in _LOCAL_DAY_ENERGY_KEYS:
+            return None
+        return dt_util.start_of_local_day()
 
 
 class DaikinDiagnosticSensor(DaikinEntity, SensorEntity):

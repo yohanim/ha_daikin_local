@@ -132,7 +132,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bo
             device: Appliance = await DaikinFactory(host, session)
         _LOGGER.debug("Connection to %s successful", host)
     except TimeoutError as err:
-        _LOGGER.debug("Connection to %s timed out in %s seconds", host, timeout)
+        _LOGGER.debug(
+            "Connection to %s timed out in %s seconds", host, connection_timeout
+        )
         raise ConfigEntryNotReady from err
     except ClientConnectionError as err:
         _LOGGER.debug("ClientConnectionError to %s", host)

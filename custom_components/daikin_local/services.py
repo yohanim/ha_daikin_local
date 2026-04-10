@@ -5,12 +5,14 @@ import logging
 
 import voluptuous as vol
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 
 from .const import (
+    ATTR_TOTAL_ENERGY_TODAY,
     CONF_ENERGY_GROUP_ID,
     CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER,
     CONF_HISTORY_HOURS_TO_CORRECT,
@@ -37,7 +39,7 @@ SERVICE_SCHEMA = vol.Schema(
 )
 
 
-def _loaded_config_entries(hass: HomeAssistant):
+def _loaded_config_entries(hass: HomeAssistant) -> list[ConfigEntry]:
     """Config entries for this integration that have a running coordinator."""
     return [
         e
@@ -48,8 +50,14 @@ def _loaded_config_entries(hass: HomeAssistant):
 
 def _entries_for_entity_target(
     hass: HomeAssistant, target_entity_id: str | None
-) -> list:
-    """Entries to run. With ``entity_id``, only the owning loaded entry (or none)."""
+) -> list[ConfigEntry]:
+    """Entries to run a service on.
+
+    Without ``entity_id``: all loaded entries. With ``entity_id``: only the
+    config entry that owns that entity. The same ``target_entity_id`` is still
+    passed into ``async_sync_history`` / ``async_sync_total_history`` so the
+    coordinator can limit which sensor entity IDs are corrected inside that entry.
+    """
     loaded = _loaded_config_entries(hass)
     if not target_entity_id:
         return loaded
@@ -85,6 +93,35 @@ def _entries_for_entity_target(
         )
         return []
     return [entry]
+
+
+def _group_has_master(entries: list[ConfigEntry], group: str) -> bool:
+    """True if some loaded entry marks itself master for this non-empty group id."""
+    g = group.strip()
+    if not g:
+        return False
+    return any(
+        (e.options.get(CONF_ENERGY_GROUP_ID) or "").strip() == g
+        and bool(e.options.get(CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER, False))
+        for e in entries
+    )
+
+
+def _total_energy_sensor_enabled(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """True if the compressor total-energy-today sensor exists and is enabled."""
+    runtime = getattr(entry, "runtime_data", None)
+    if runtime is None or not hasattr(runtime, "device"):
+        return False
+    mac = runtime.device.mac
+    unique_id = f"{mac}-{ATTR_TOTAL_ENERGY_TODAY}"
+    ent_reg = er.async_get(hass)
+    eid = ent_reg.async_get_entity_id("sensor", DOMAIN, unique_id)
+    if not eid:
+        return False
+    reg = ent_reg.async_get(eid)
+    if reg is None:
+        return False
+    return reg.disabled_by is None
 
 
 async def async_setup_services(hass: HomeAssistant) -> None:
@@ -164,23 +201,21 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 )
             return
 
-        # If at least one entry declares itself "total history master" for a group,
-        # run the group-scoped correction only on masters to avoid duplicate imports.
-        masters_by_group: set[str] = set()
-        for e in entries:
-            group = (e.options.get(CONF_ENERGY_GROUP_ID) or "").strip()
-            if (
-                group
-                and bool(e.options.get(CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER, False))
-            ):
-                masters_by_group.add(group)
-
         for entry in entries:
             group = (entry.options.get(CONF_ENERGY_GROUP_ID) or "").strip()
-            if group and group in masters_by_group and not bool(
+            is_master = bool(
                 entry.options.get(CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER, False)
-            ):
+            )
+
+            if group:
+                if _group_has_master(entries, group):
+                    if not is_master:
+                        continue
+                elif not _total_energy_sensor_enabled(hass, entry):
+                    continue
+            elif not _total_energy_sensor_enabled(hass, entry):
                 continue
+
             coordinator = entry.runtime_data
             await coordinator.async_sync_total_history(
                 days_ago=days_ago,
