@@ -117,14 +117,23 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
                 errors={"base": "cannot_connect"},
             )
         except DaikinException as daikin_exp:
-            _LOGGER.error(daikin_exp)
+            _LOGGER.error(
+                "[config] Daikin API error while creating device for host=%s (timeout=%ss): %s",
+                host,
+                timeout,
+                daikin_exp,
+            )
             return self.async_show_form(
                 step_id="user",
                 data_schema=self.schema,
                 errors={"base": "unknown"},
             )
         except Exception:
-            _LOGGER.exception("Unexpected error creating device")
+            _LOGGER.exception(
+                "[config] Unexpected error creating device for host=%s (timeout=%ss)",
+                host,
+                timeout,
+            )
             return self.async_show_form(
                 step_id="user",
                 data_schema=self.schema,
@@ -190,10 +199,19 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
             except (TimeoutError, ClientError):
                 errors["base"] = "cannot_connect"
             except DaikinException as daikin_exp:
-                _LOGGER.error(daikin_exp)
+                _LOGGER.error(
+                    "[config] Daikin API error while reconfiguring device for host=%s (timeout=%ss): %s",
+                    host,
+                    timeout,
+                    daikin_exp,
+                )
                 errors["base"] = "unknown"
             except Exception:
-                _LOGGER.exception("Unexpected error reconfiguring device")
+                _LOGGER.exception(
+                    "[config] Unexpected error reconfiguring device for host=%s (timeout=%ss)",
+                    host,
+                    timeout,
+                )
                 errors["base"] = "unknown"
             else:
                 if device.mac != entry.data[KEY_MAC]:

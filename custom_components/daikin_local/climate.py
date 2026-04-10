@@ -235,7 +235,12 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
                 elif value in self._list[attr]:
                     values[daikin_attr] = value
                 else:
-                    _LOGGER.error("Invalid value %s for %s", value, attr)
+                    _LOGGER.error(
+                        "[climate] Invalid value %s for %s (entity_id=%s)",
+                        value,
+                        attr,
+                        self.entity_id,
+                    )
 
             # temperature
             elif attr == ATTR_TEMPERATURE:
@@ -243,8 +248,12 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
                     values[HA_ATTR_TO_DAIKIN[ATTR_TARGET_TEMPERATURE]] = (
                         format_target_temperature(value)
                     )
-                except (ValueError):
-                    _LOGGER.error("Invalid temperature %s", value)
+                except ValueError:
+                    _LOGGER.error(
+                        "[climate] Invalid temperature %s (entity_id=%s)",
+                        value,
+                        self.entity_id,
+                    )
 
         if values:
             await self.device.set(values)

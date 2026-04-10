@@ -412,8 +412,8 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             # Widen next run's window to backfill one extra hour.
             self._history_backfill_extra_hour = True
             _LOGGER.warning(
-                "[history] Auto history sync failed for %s: %s "
-                "(will retry on next poll)",
+                "[energy/history] Auto history sync failed for %s: %s "
+                "(will retry on a later energy refresh)",
                 self.name,
                 err,
             )
@@ -438,7 +438,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         if self._poll_cooldown_until is not None and now < self._poll_cooldown_until:
             if self.data is not None:
                 _LOGGER.debug(
-                    "[poll] Skipping update for %s during cooldown until %s",
+                    "[coordinator] Skipping update for %s during cooldown until %s",
                     self.name,
                     self._poll_cooldown_until,
                 )
@@ -475,7 +475,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                         resources.extend(BRP069_STATE_RESOURCES)
                         brp069_state_attempted = True
                     _LOGGER.debug(
-                        "[poll] Updating %s via update_status(%s)",
+                        "[coordinator] Updating %s via update_status(%s)",
                         self.name,
                         resources,
                     )
@@ -486,7 +486,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                         self._brp069_last_energy_poll_mono = now_mono
                 else:
                     _LOGGER.debug(
-                        "[poll] Updating %s via pydaikin update_status()", self.name
+                        "[coordinator] Updating %s via pydaikin update_status()", self.name
                     )
                     await self.device.update_status()
         except Exception as err:
@@ -508,10 +508,20 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             cooldown_s = min(300, 30 * self._consecutive_poll_failures)
             self._poll_cooldown_until = now + timedelta(seconds=cooldown_s)
 
+            domains = "state"
+            if isinstance(self.device, DaikinBRP069):
+                attempted: list[str] = []
+                if brp069_state_attempted:
+                    attempted.append("state")
+                if brp069_energy_attempted:
+                    attempted.append("energy")
+                domains = "+".join(attempted) if attempted else "state"
+
             if self.data is not None and self._consecutive_poll_failures <= 3:
                 _LOGGER.warning(
-                    "[poll] Transient communication error for %s (%s); "
+                    "[%s] Transient communication error for %s (%s); "
                     "serving cached data, cooldown=%ss (failure #%s)",
+                    domains,
                     self.name,
                     err,
                     cooldown_s,
@@ -521,7 +531,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
             # Escalate: persistent comm failures.
             raise UpdateFailed(
-                f"[poll] Error communicating with Daikin {self.name}: {err}"
+                f"[{domains}] Error communicating with Daikin {self.name}: {err}"
             ) from err
 
         # Successful poll: reset cooldown and consecutive failure state.
@@ -624,7 +634,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             return
 
         _LOGGER.info(
-            "[history] Syncing energy history for %s (days_ago=%s)",
+            "[energy/history] Syncing energy history for %s (days_ago=%s)",
             self.name,
             days_ago,
         )
