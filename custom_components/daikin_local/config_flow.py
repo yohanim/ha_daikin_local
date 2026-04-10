@@ -29,14 +29,15 @@ from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
 from .const import (
     CONF_AUTO_HISTORY_SYNC,
+    CONF_CONNECTION_TIMEOUT,
     CONF_ENERGY_GROUP_ID,
     CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER,
     CONF_HISTORY_HOURS_TO_CORRECT,
     CONF_HISTORY_SKIP_EXTRA_HOURS,
     CONF_INSERT_MISSING,
     CONF_POLL_INTERVAL_ENERGY_SEC,
+    CONF_POLL_INTERVAL_SEC,
     CONF_POLL_INTERVAL_STATE_SEC,
-    CONF_TIMEOUT,
     DOMAIN,
     KEY_IS_BRP069,
     KEY_MAC,
@@ -50,7 +51,7 @@ _LOGGER = logging.getLogger(__name__)
 class FlowHandler(ConfigFlow, domain=DOMAIN):
     """Handle a config flow."""
 
-    VERSION = 4
+    VERSION = 5
 
     def __init__(self) -> None:
         """Initialize the Daikin config flow."""
@@ -68,7 +69,8 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
         return vol.Schema(
             {
                 vol.Required(CONF_HOST, default=self.host): str,
-                vol.Optional(CONF_TIMEOUT, default=TIMEOUT_SEC): int,
+                vol.Optional(CONF_CONNECTION_TIMEOUT, default=TIMEOUT_SEC): int,
+                vol.Optional(CONF_POLL_INTERVAL_SEC, default=TIMEOUT_SEC): int,
             }
         )
 
@@ -76,7 +78,8 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
         self,
         host: str,
         mac: str,
-        timeout: int = TIMEOUT_SEC,
+        connection_timeout: int = TIMEOUT_SEC,
+        poll_interval_sec: int = TIMEOUT_SEC,
         *,
         is_brp069: bool = False,
         supports_energy: bool = False,
@@ -91,7 +94,8 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
             data={
                 CONF_HOST: host,
                 KEY_MAC: mac,
-                CONF_TIMEOUT: timeout,
+                CONF_CONNECTION_TIMEOUT: connection_timeout,
+                CONF_POLL_INTERVAL_SEC: poll_interval_sec,
                 KEY_IS_BRP069: is_brp069,
                 KEY_SUPPORTS_ENERGY: supports_energy,
             },
@@ -100,11 +104,12 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
     async def _create_device(
         self,
         host: str,
-        timeout: int = TIMEOUT_SEC,
+        connection_timeout: int = TIMEOUT_SEC,
+        poll_interval_sec: int = TIMEOUT_SEC,
     ) -> ConfigFlowResult:
         """Create device."""
         try:
-            async with asyncio.timeout(timeout):
+            async with asyncio.timeout(connection_timeout):
                 device: Appliance = await DaikinFactory(
                     host,
                     async_get_clientsession(self.hass),
@@ -118,9 +123,10 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
             )
         except DaikinException as daikin_exp:
             _LOGGER.error(
-                "[config] Daikin API error while creating device for host=%s (timeout=%ss): %s",
+                "[config] Daikin API error while creating device for host=%s "
+                "(connection_timeout=%ss): %s",
                 host,
-                timeout,
+                connection_timeout,
                 daikin_exp,
             )
             return self.async_show_form(
@@ -130,9 +136,10 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
             )
         except Exception:
             _LOGGER.exception(
-                "[config] Unexpected error creating device for host=%s (timeout=%ss)",
+                "[config] Unexpected error creating device for host=%s "
+                "(connection_timeout=%ss)",
                 host,
-                timeout,
+                connection_timeout,
             )
             return self.async_show_form(
                 step_id="user",
@@ -144,7 +151,8 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
         return await self._create_entry(
             host,
             mac,
-            timeout,
+            connection_timeout=connection_timeout,
+            poll_interval_sec=poll_interval_sec,
             is_brp069=isinstance(device, DaikinBRP069),
             supports_energy=bool(device.support_energy_consumption),
         )
@@ -157,7 +165,10 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
             return self.async_show_form(step_id="user", data_schema=self.schema)
         return await self._create_device(
             user_input[CONF_HOST],
-            user_input.get(CONF_TIMEOUT, TIMEOUT_SEC),
+            connection_timeout=user_input.get(
+                CONF_CONNECTION_TIMEOUT, TIMEOUT_SEC
+            ),
+            poll_interval_sec=user_input.get(CONF_POLL_INTERVAL_SEC, TIMEOUT_SEC),
         )
 
     async def async_step_zeroconf(
@@ -183,15 +194,18 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Let the user change host and timeout for an existing entry."""
+        """Let the user change host, connection timeout, and update interval."""
         entry = self._get_reconfigure_entry()
         errors: dict[str, str] = {}
 
         if user_input is not None:
             host = user_input[CONF_HOST]
-            timeout = user_input.get(CONF_TIMEOUT, TIMEOUT_SEC)
+            connection_timeout = user_input.get(
+                CONF_CONNECTION_TIMEOUT, TIMEOUT_SEC
+            )
+            poll_interval_sec = user_input.get(CONF_POLL_INTERVAL_SEC, TIMEOUT_SEC)
             try:
-                async with asyncio.timeout(timeout):
+                async with asyncio.timeout(connection_timeout):
                     device: Appliance = await DaikinFactory(
                         host,
                         async_get_clientsession(self.hass),
@@ -200,17 +214,19 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
             except DaikinException as daikin_exp:
                 _LOGGER.error(
-                    "[config] Daikin API error while reconfiguring device for host=%s (timeout=%ss): %s",
+                    "[config] Daikin API error while reconfiguring device for host=%s "
+                    "(connection_timeout=%ss): %s",
                     host,
-                    timeout,
+                    connection_timeout,
                     daikin_exp,
                 )
                 errors["base"] = "unknown"
             except Exception:
                 _LOGGER.exception(
-                    "[config] Unexpected error reconfiguring device for host=%s (timeout=%ss)",
+                    "[config] Unexpected error reconfiguring device for host=%s "
+                    "(connection_timeout=%ss)",
                     host,
-                    timeout,
+                    connection_timeout,
                 )
                 errors["base"] = "unknown"
             else:
@@ -221,7 +237,8 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
                         entry,
                         data_updates={
                             CONF_HOST: host,
-                            CONF_TIMEOUT: timeout,
+                            CONF_CONNECTION_TIMEOUT: connection_timeout,
+                            CONF_POLL_INTERVAL_SEC: poll_interval_sec,
                             KEY_IS_BRP069: isinstance(device, DaikinBRP069),
                             KEY_SUPPORTS_ENERGY: bool(device.support_energy_consumption),
                         },
@@ -233,14 +250,23 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
                     CONF_HOST, default=entry.data[CONF_HOST]
                 ): str,
                 vol.Optional(
-                    CONF_TIMEOUT,
-                    default=entry.data.get(CONF_TIMEOUT, TIMEOUT_SEC),
+                    CONF_CONNECTION_TIMEOUT,
+                    default=entry.data.get(CONF_CONNECTION_TIMEOUT, TIMEOUT_SEC),
+                ): int,
+                vol.Optional(
+                    CONF_POLL_INTERVAL_SEC,
+                    default=entry.data.get(CONF_POLL_INTERVAL_SEC, TIMEOUT_SEC),
                 ): int,
             }
         )
         suggested = {
             CONF_HOST: entry.data[CONF_HOST],
-            CONF_TIMEOUT: entry.data.get(CONF_TIMEOUT, TIMEOUT_SEC),
+            CONF_CONNECTION_TIMEOUT: entry.data.get(
+                CONF_CONNECTION_TIMEOUT, TIMEOUT_SEC
+            ),
+            CONF_POLL_INTERVAL_SEC: entry.data.get(
+                CONF_POLL_INTERVAL_SEC, TIMEOUT_SEC
+            ),
         }
         return self.async_show_form(
             step_id="reconfigure",
@@ -266,8 +292,14 @@ class OptionsFlowHandler(OptionsFlow):
             and self.config_entry.data.get(KEY_SUPPORTS_ENERGY)
         )
         suggested = {
-            CONF_TIMEOUT: self.config_entry.options.get(CONF_TIMEOUT)
-            or self.config_entry.data.get(CONF_TIMEOUT, TIMEOUT_SEC),
+            CONF_CONNECTION_TIMEOUT: self.config_entry.options.get(
+                CONF_CONNECTION_TIMEOUT
+            )
+            or self.config_entry.data.get(CONF_CONNECTION_TIMEOUT, TIMEOUT_SEC),
+            CONF_POLL_INTERVAL_SEC: self.config_entry.options.get(
+                CONF_POLL_INTERVAL_SEC
+            )
+            or self.config_entry.data.get(CONF_POLL_INTERVAL_SEC, TIMEOUT_SEC),
             CONF_ENERGY_GROUP_ID: self.config_entry.options.get(CONF_ENERGY_GROUP_ID, ""),
             CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER: self.config_entry.options.get(
                 CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER, False
@@ -287,7 +319,8 @@ class OptionsFlowHandler(OptionsFlow):
         }
 
         schema_dict: dict = {
-            vol.Optional(CONF_TIMEOUT, default=TIMEOUT_SEC): int,
+            vol.Optional(CONF_CONNECTION_TIMEOUT, default=TIMEOUT_SEC): int,
+            vol.Optional(CONF_POLL_INTERVAL_SEC, default=TIMEOUT_SEC): int,
             vol.Optional(CONF_ENERGY_GROUP_ID, default=""): str,
             vol.Optional(
                 CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER, default=False

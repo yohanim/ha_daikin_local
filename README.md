@@ -40,14 +40,14 @@ A custom integration for Home Assistant to locally control Daikin air conditione
 
 ### Translations
 
-UI strings: `custom_components/daikin_local/strings.json` (English, required by some tooling) mirrors `translations/en.json`; other languages live in `translations/` (e.g. `fr.json`). Keys under `config.step.*.data` must match the **field names** in `config_flow.py` (e.g. `host`, `timeout`); values like `[%key:common::config_flow::data::host%]` reuse Home Assistant’s built‑in labels. When you change English strings, update **`strings.json` and `translations/en.json` together** so they stay in sync.
+UI strings: `custom_components/daikin_local/strings.json` (English, required by some tooling) mirrors `translations/en.json`; other languages live in `translations/` (e.g. `fr.json`). Keys under `config.step.*.data` must match the **field names** in `config_flow.py` (e.g. `host`, `connection_timeout`, `poll_interval_sec`); values like `[%key:common::config_flow::data::host%]` reuse Home Assistant’s built‑in labels. When you change English strings, update **`strings.json` and `translations/en.json` together** so they stay in sync.
 
 ## ⚙️ Configuration
 
 1. Go to **Settings** > **Devices & Services**.
 2. Click **Add Integration**.
 3. Search for **Daikin Local**.
-4. Enter the IP address of your Daikin unit.
+4. Enter the IP address of your Daikin unit, plus **connection timeout** (max time per HTTP request) and **update interval** (coordinator cadence when not using BRP069 state/energy split).
    - *Note: It is highly recommended to set a static IP for your AC unit via your router.*
 
 ## ⚡ Energy Management Details
@@ -77,7 +77,7 @@ There are **two complementary ways** to correct history:
    - Recent, completed hours are selected based on:
      - `history_skip_extra_hours` → additional most recent hours to skip (current hour is always skipped).
      - `history_hours_to_correct` → number of hours to correct immediately before the skipped range.
-   - If a run fails (recorder not ready, transient errors), the integration broadens the window by one extra hour on the next attempt and retries on the next poll.
+   - If a run fails (recorder not ready, transient errors), the integration broadens the window by one extra hour on the next attempt and retries on the next **energy** refresh.
 
 Polling interval is set when adding the device, under **Reconfigure**, or in **Options** — Options override the value stored at setup when set.
 

@@ -15,7 +15,7 @@ sync_history:
           mode: box
     entity_id:
       name: Target sensor (optional)
-      description: If set, only this Daikin energy sensor is corrected (must belong to this integration).
+      description: If set, only the config entry that owns this entity runs the service (must belong to this integration).
       required: false
       selector:
         entity:

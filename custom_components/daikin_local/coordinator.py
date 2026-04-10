@@ -10,7 +10,7 @@ import time
 from pydaikin.daikin_base import Appliance
 from pydaikin.daikin_brp069 import DaikinBRP069
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_TIMEOUT, UnitOfEnergy
+from homeassistant.const import UnitOfEnergy
 from homeassistant.core import HomeAssistant
 from homeassistant.components import recorder
 from homeassistant.helpers import entity_registry as er
@@ -25,11 +25,13 @@ from .const import (
     ATTR_TOTAL_ENERGY_TODAY,
     ATTR_TOTAL_POWER,
     CONF_AUTO_HISTORY_SYNC,
+    CONF_CONNECTION_TIMEOUT,
     CONF_ENERGY_GROUP_ID,
     CONF_HISTORY_HOURS_TO_CORRECT,
     CONF_HISTORY_SKIP_EXTRA_HOURS,
     CONF_INSERT_MISSING,
     CONF_POLL_INTERVAL_ENERGY_SEC,
+    CONF_POLL_INTERVAL_SEC,
     CONF_POLL_INTERVAL_STATE_SEC,
     DOMAIN,
     TIMEOUT_SEC,
@@ -195,11 +197,20 @@ def _lts_row_start_to_datetime(
     return None
 
 
-def _poll_timeout_sec(entry: ConfigEntry) -> int:
-    """Polling interval (seconds): options override data when set."""
+def _connection_timeout_sec(entry: ConfigEntry) -> int:
+    """HTTP request timeout (seconds): options override data when set."""
     return (
-        entry.options.get(CONF_TIMEOUT)
-        or entry.data.get(CONF_TIMEOUT)
+        entry.options.get(CONF_CONNECTION_TIMEOUT)
+        or entry.data.get(CONF_CONNECTION_TIMEOUT)
+        or TIMEOUT_SEC
+    )
+
+
+def _coordinator_poll_interval_sec(entry: ConfigEntry) -> int:
+    """Coordinator tick when not scheduled by BRP069 energy cadence (seconds)."""
+    return (
+        entry.options.get(CONF_POLL_INTERVAL_SEC)
+        or entry.data.get(CONF_POLL_INTERVAL_SEC)
         or TIMEOUT_SEC
     )
 
@@ -229,14 +240,14 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         self, hass: HomeAssistant, entry: DaikinConfigEntry, device: Appliance
     ) -> None:
         """Initialize global Daikin data updater."""
-        timeout = _poll_timeout_sec(entry)
+        poll_interval = _coordinator_poll_interval_sec(entry)
         state_interval_s, energy_interval_s = _domain_poll_intervals_sec(entry)
         # Coordinator schedule: for BRP069 we run at the fastest (energy) cadence
         # and decide which domain to poll on each tick.
         update_interval_s = (
             energy_interval_s
             if isinstance(device, DaikinBRP069) and device.support_energy_consumption
-            else timeout
+            else poll_interval
         )
         super().__init__(
             hass,
@@ -424,7 +435,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
     async def _async_update_data(self) -> DaikinData:
         """Update data."""
-        timeout = _poll_timeout_sec(self.config_entry)
+        timeout = _connection_timeout_sec(self.config_entry)
         now = dt_util.utcnow()
         now_mono = time.monotonic()
 

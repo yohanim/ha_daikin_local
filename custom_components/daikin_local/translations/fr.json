@@ -14,22 +14,25 @@
       "user": {
         "data": {
           "host": "[%key:common::config_flow::data::host%]",
-          "timeout": "Intervalle de rafraîchissement (secondes)"
+          "connection_timeout": "Délai de connexion HTTP (secondes)",
+          "poll_interval_sec": "Intervalle de mise à jour (secondes)"
         },
-        "description": "Entrez l'adresse IP de votre unité Daikin.\nL'intervalle de rafraîchissement est la fréquence à laquelle Home Assistant interroge l'appareil (même valeur pour le test de connexion).",
+        "description": "Entrez l'adresse IP de votre unité Daikin.\nLe délai de connexion est le temps maximum autorisé pour chaque requête HTTP vers l'appareil (y compris la découverte initiale).\nL'intervalle de mise à jour est la fréquence de planification des rafraîchissements lorsque l'appareil n'utilise pas le découpage BRP069 état/énergie.",
         "title": "Configurer Daikin"
       },
       "reconfigure": {
         "data": {
           "host": "[%key:common::config_flow::data::host%]",
-          "timeout": "Intervalle de rafraîchissement (secondes)"
+          "connection_timeout": "Délai de connexion HTTP (secondes)",
+          "poll_interval_sec": "Intervalle de mise à jour (secondes)"
         },
-        "description": "Modifiez l'adresse IP ou l'intervalle de rafraîchissement.",
+        "description": "Modifiez l'adresse IP, le délai de connexion ou l'intervalle de mise à jour.",
         "title": "Reconfigurer Daikin"
       },
       "init": {
         "data": {
-          "timeout": "Intervalle de rafraîchissement (secondes)",
+          "connection_timeout": "Délai de connexion HTTP (secondes)",
+          "poll_interval_sec": "Intervalle de mise à jour (secondes)",
           "energy_group_id": "Identifiant de groupe énergie (optionnel)",
           "energy_group_total_history_master": "Maître pour la correction du total (groupe énergie)",
           "poll_interval_state_sec": "Intervalle de polling (état) (secondes)",
@@ -39,7 +42,7 @@
           "history_skip_extra_hours": "Heures supplémentaires à ignorer (l'heure en cours est toujours ignorée)",
           "history_hours_to_correct": "Nombre d'heures précédentes à corriger"
         },
-        "description": "L'intervalle de rafraîchissement ici remplace celui défini à l'ajout si renseigné. Pour les adaptateurs BRP069, le polling peut être séparé en domaines : état (capteurs/contrôle) et énergie (puissance jour/semaine) avec des intervalles distincts. La synchro auto d'historique utilise le même rythme que le polling : après chaque lecture réussie des capteurs, une correction LTS est tentée au plus une fois par heure locale (nouvelle tentative au poll suivant si elle échoue). « Insertion manquants » : lors des corrections d'historique, autoriser la création de lignes pour les heures sans donnée (rare conflit avec le recorder ; les actions peuvent surcharger).",
+        "description": "Le délai de connexion et l'intervalle de mise à jour peuvent remplacer les valeurs définies à l'ajout. Pour les BRP069 avec énergie, la planification utilise les intervalles état et énergie plutôt qu'un seul intervalle global. La synchro auto d'historique s'exécute après les rafraîchissements énergie : correction LTS au plus une fois par heure locale (nouvelle tentative au prochain rafraîchissement énergie si échec). « Insertion manquants » : autoriser la création de lignes pour les heures sans donnée (rare conflit avec le recorder ; les services peuvent surcharger).",
         "title": "Options Daikin"
       }
     }
@@ -48,7 +51,8 @@
     "step": {
       "init": {
         "data": {
-          "timeout": "Intervalle de rafraîchissement (secondes)",
+          "connection_timeout": "Délai de connexion HTTP (secondes)",
+          "poll_interval_sec": "Intervalle de mise à jour (secondes)",
           "energy_group_id": "Identifiant de groupe énergie (optionnel)",
           "energy_group_total_history_master": "Maître pour la correction du total (groupe énergie)",
           "poll_interval_state_sec": "Intervalle de polling (état) (secondes)",
@@ -74,7 +78,7 @@
         },
         "entity_id": {
           "name": "Capteur cible (optionnel)",
-          "description": "Si renseigné, seul ce capteur d'énergie Daikin est mis à jour."
+          "description": "Si renseigné, seule l'entrée de configuration propriétaire de cette entité exécute le service (plus rapide que de parcourir tous les appareils)."
         },
         "insert_missing": {
           "name": "Créer les créneaux manquants",
@@ -181,13 +185,13 @@
         "name": "Consommation aujourd'hui"
       },
       "pydaikin_daily_poll_errors": {
-        "name": "Erreurs quotidiennes de polling pydaikin"
+        "name": "Erreurs de communication quotidiennes (total)"
       },
       "pydaikin_daily_state_poll_errors": {
-        "name": "Erreurs quotidiennes de polling (état) pydaikin"
+        "name": "Erreurs quotidiennes de mise à jour (état)"
       },
       "pydaikin_daily_energy_poll_errors": {
-        "name": "Erreurs quotidiennes de polling (énergie) pydaikin"
+        "name": "Erreurs quotidiennes de mise à jour (énergie)"
       },
       "compressor_frequency": {
         "name": "Fréquence du compresseur"

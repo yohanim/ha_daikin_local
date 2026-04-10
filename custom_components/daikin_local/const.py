@@ -27,7 +27,12 @@ KEY_MAC = "mac"
 KEY_IS_BRP069 = "is_brp069"
 KEY_SUPPORTS_ENERGY = "supports_energy"
 
+# Legacy single field (v4 and below); migrated to connection_timeout + poll_interval_sec.
 CONF_TIMEOUT = "timeout"
+# Max time for a single HTTP request to the adapter (asyncio.timeout around pydaikin calls).
+CONF_CONNECTION_TIMEOUT = "connection_timeout"
+# How often the DataUpdateCoordinator runs when not using BRP069 energy split scheduling.
+CONF_POLL_INTERVAL_SEC = "poll_interval_sec"
 # When True, periodically inject Daikin hourly energy into recorder LTS (opt-in).
 CONF_AUTO_HISTORY_SYNC = "auto_history_sync"
 # When True, history sync may INSERT missing hourly LTS rows (can conflict with recorder).

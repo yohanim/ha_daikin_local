@@ -11,7 +11,7 @@ from pydaikin.daikin_brp069 import DaikinBRP069
 from pydaikin.factory import DaikinFactory
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, CONF_TIMEOUT, Platform
+from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr, entity_registry as er
@@ -19,7 +19,10 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 
 from .const import (
+    CONF_CONNECTION_TIMEOUT,
     CONF_HISTORY_SKIP_EXTRA_HOURS,
+    CONF_POLL_INTERVAL_SEC,
+    CONF_TIMEOUT,
     DOMAIN,
     KEY_IS_BRP069,
     KEY_MAC,
@@ -84,6 +87,28 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.config_entries.async_update_entry(entry, options=options, version=4)
         return True
 
+    # v4 -> v5: split legacy `timeout` into connection vs coordinator refresh interval
+    if entry.version == 4:
+        data = dict(entry.data)
+        options = dict(entry.options)
+        try:
+            legacy = int(
+                options.get(CONF_TIMEOUT) or data.get(CONF_TIMEOUT) or TIMEOUT_SEC
+            )
+        except (TypeError, ValueError):
+            legacy = TIMEOUT_SEC
+        options.pop(CONF_TIMEOUT, None)
+        data.pop(CONF_TIMEOUT, None)
+        data[CONF_CONNECTION_TIMEOUT] = legacy
+        data[CONF_POLL_INTERVAL_SEC] = legacy
+        hass.config_entries.async_update_entry(
+            entry,
+            data=data,
+            options=options,
+            version=5,
+        )
+        return True
+
     return True
 
 
@@ -96,10 +121,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bo
 
     session = async_get_clientsession(hass)
     host = conf[CONF_HOST]
-    # Polling / connection timeout: options override data (same as coordinator).
-    timeout = entry.options.get(CONF_TIMEOUT) or conf.get(CONF_TIMEOUT) or TIMEOUT_SEC
+    # HTTP request timeout: options override data (same as coordinator).
+    connection_timeout = (
+        entry.options.get(CONF_CONNECTION_TIMEOUT)
+        or conf.get(CONF_CONNECTION_TIMEOUT)
+        or TIMEOUT_SEC
+    )
     try:
-        async with asyncio.timeout(timeout):
+        async with asyncio.timeout(connection_timeout):
             device: Appliance = await DaikinFactory(host, session)
         _LOGGER.debug("Connection to %s successful", host)
     except TimeoutError as err:

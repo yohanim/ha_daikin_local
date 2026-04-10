@@ -94,7 +94,13 @@ class DaikinStreamerSwitch(DaikinEntity, SwitchEntity):
     @property
     def is_on(self) -> bool:
         """Return the state of the sensor."""
-        return DAIKIN_ATTR_STREAMER in self.device.represent(DAIKIN_ATTR_ADVANCED)[1]
+        try:
+            rep = self.device.represent(DAIKIN_ATTR_ADVANCED)
+        except (KeyError, IndexError, TypeError, ValueError):
+            return False
+        if not rep or len(rep) < 2 or rep[1] is None:
+            return False
+        return DAIKIN_ATTR_STREAMER in rep[1]
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the zone on."""

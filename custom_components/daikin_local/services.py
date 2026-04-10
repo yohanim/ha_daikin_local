@@ -1,11 +1,14 @@
 """Services for Daikin integration."""
 from __future__ import annotations
 
+import logging
+
 import voluptuous as vol
 
 from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import entity_registry as er
 
 from .const import (
     CONF_ENERGY_GROUP_ID,
@@ -15,6 +18,8 @@ from .const import (
     CONF_INSERT_MISSING,
     DOMAIN,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 SERVICE_SYNC_HISTORY = "sync_history"
 SERVICE_SYNC_TOTAL_HISTORY = "sync_total_history"
@@ -30,6 +35,57 @@ SERVICE_SCHEMA = vol.Schema(
         vol.Optional(CONF_HISTORY_HOURS_TO_CORRECT): vol.Coerce(int),
     }
 )
+
+
+def _loaded_config_entries(hass: HomeAssistant):
+    """Config entries for this integration that have a running coordinator."""
+    return [
+        e
+        for e in hass.config_entries.async_entries(DOMAIN)
+        if getattr(e, "runtime_data", None)
+    ]
+
+
+def _entries_for_entity_target(
+    hass: HomeAssistant, target_entity_id: str | None
+) -> list:
+    """Entries to run. With ``entity_id``, only the owning loaded entry (or none)."""
+    loaded = _loaded_config_entries(hass)
+    if not target_entity_id:
+        return loaded
+    ent_reg = er.async_get(hass)
+    reg = ent_reg.async_get(target_entity_id)
+    if reg is None:
+        _LOGGER.warning(
+            "[service] Unknown %s %s; skipping",
+            ATTR_ENTITY_ID,
+            target_entity_id,
+        )
+        return []
+    if not reg.config_entry_id:
+        _LOGGER.warning(
+            "[service] %s %s is not tied to a config entry; skipping",
+            ATTR_ENTITY_ID,
+            target_entity_id,
+        )
+        return []
+    entry = hass.config_entries.async_get_entry(reg.config_entry_id)
+    if entry is None or entry.domain != DOMAIN:
+        _LOGGER.warning(
+            "[service] %s %s is not owned by %s; skipping",
+            ATTR_ENTITY_ID,
+            target_entity_id,
+            DOMAIN,
+        )
+        return []
+    if not getattr(entry, "runtime_data", None):
+        _LOGGER.warning(
+            "[service] Config entry for %s is not loaded; skipping",
+            target_entity_id,
+        )
+        return []
+    return [entry]
+
 
 async def async_setup_services(hass: HomeAssistant) -> None:
     """Set up services for the Daikin integration."""
@@ -54,17 +110,15 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             else None
         )
 
-        # In HA 2026.3, runtime_data is stored in entry.runtime_data
-        for entry in hass.config_entries.async_entries(DOMAIN):
-            if hasattr(entry, "runtime_data") and entry.runtime_data:
-                coordinator = entry.runtime_data
-                await coordinator.async_sync_history(
-                    days_ago=days_ago,
-                    target_entity_id=target_entity_id,
-                    insert_missing=insert_missing,
-                    history_skip_extra_hours=history_skip_extra_hours,
-                    history_hours_to_correct=history_hours_to_correct,
-                )
+        for entry in _entries_for_entity_target(hass, target_entity_id):
+            coordinator = entry.runtime_data
+            await coordinator.async_sync_history(
+                days_ago=days_ago,
+                target_entity_id=target_entity_id,
+                insert_missing=insert_missing,
+                history_skip_extra_hours=history_skip_extra_hours,
+                history_hours_to_correct=history_hours_to_correct,
+            )
 
     hass.services.async_register(
         DOMAIN,
@@ -93,11 +147,22 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             else None
         )
 
-        entries = [
-            e
-            for e in hass.config_entries.async_entries(DOMAIN)
-            if hasattr(e, "runtime_data") and e.runtime_data
-        ]
+        if target_entity_id:
+            entries = _entries_for_entity_target(hass, target_entity_id)
+        else:
+            entries = _loaded_config_entries(hass)
+
+        if target_entity_id:
+            for entry in entries:
+                coordinator = entry.runtime_data
+                await coordinator.async_sync_total_history(
+                    days_ago=days_ago,
+                    target_entity_id=target_entity_id,
+                    insert_missing=insert_missing,
+                    history_skip_extra_hours=history_skip_extra_hours,
+                    history_hours_to_correct=history_hours_to_correct,
+                )
+            return
 
         # If at least one entry declares itself "total history master" for a group,
         # run the group-scoped correction only on masters to avoid duplicate imports.
@@ -116,15 +181,14 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 entry.options.get(CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER, False)
             ):
                 continue
-            if hasattr(entry, "runtime_data") and entry.runtime_data:
-                coordinator = entry.runtime_data
-                await coordinator.async_sync_total_history(
-                    days_ago=days_ago,
-                    target_entity_id=target_entity_id,
-                    insert_missing=insert_missing,
-                    history_skip_extra_hours=history_skip_extra_hours,
-                    history_hours_to_correct=history_hours_to_correct,
-                )
+            coordinator = entry.runtime_data
+            await coordinator.async_sync_total_history(
+                days_ago=days_ago,
+                target_entity_id=target_entity_id,
+                insert_missing=insert_missing,
+                history_skip_extra_hours=history_skip_extra_hours,
+                history_hours_to_correct=history_hours_to_correct,
+            )
 
     hass.services.async_register(
         DOMAIN,

@@ -14,22 +14,25 @@
       "user": {
         "data": {
           "host": "[%key:common::config_flow::data::host%]",
-          "timeout": "Polling interval (seconds)"
+          "connection_timeout": "Connection timeout (seconds)",
+          "poll_interval_sec": "Update interval (seconds)"
         },
-        "description": "Enter the IP address of your Daikin AC.\nPolling interval is how often Home Assistant refreshes data from the unit (same value is used when testing the connection).",
+        "description": "Enter the IP address of your Daikin AC.\nConnection timeout is the maximum time allowed for each HTTP request to the unit (including the initial discovery request).\nUpdate interval is how often Home Assistant schedules refreshes when your device is not using BRP069 split scheduling (state/energy intervals).",
         "title": "Configure Daikin AC"
       },
       "reconfigure": {
         "data": {
           "host": "[%key:common::config_flow::data::host%]",
-          "timeout": "Polling interval (seconds)"
+          "connection_timeout": "Connection timeout (seconds)",
+          "poll_interval_sec": "Update interval (seconds)"
         },
-        "description": "Update the IP address or polling interval.",
+        "description": "Update the IP address, connection timeout, or update interval.",
         "title": "Reconfigure Daikin AC"
       },
       "init": {
         "data": {
-          "timeout": "Polling interval (seconds)",
+          "connection_timeout": "Connection timeout (seconds)",
+          "poll_interval_sec": "Update interval (seconds)",
           "energy_group_id": "Energy group id (optional)",
           "energy_group_total_history_master": "Total history master for this energy group",
           "poll_interval_state_sec": "State polling interval (seconds)",
@@ -39,7 +42,7 @@
           "history_skip_extra_hours": "Additional hours to skip (current hour is always skipped)",
           "history_hours_to_correct": "Number of previous hours to correct"
         },
-        "description": "Polling interval overrides the value from initial setup when set. For BRP069 adapters, polling can be split into domains: state (sensor/control) and energy (day/week power) with separate intervals. Auto history sync uses the same schedule as polling: after each successful sensor refresh, LTS correction is attempted at most once per local hour (retried on the next poll if it fails). Insert missing: when correcting history, allow creating LTS rows for hours that do not exist yet (may rarely conflict with the recorder; services can override per call).",
+        "description": "Connection timeout and update interval can override the values from initial setup when set here. For BRP069 adapters with energy support, scheduling uses state vs energy intervals instead of a single global interval. Auto history sync runs after energy refreshes: LTS correction is attempted at most once per local hour (retried on the next energy refresh if it fails). Insert missing: when correcting history, allow creating LTS rows for hours that do not exist yet (may rarely conflict with the recorder; services can override per call).",
         "title": "Daikin AC options"
       }
     }
@@ -48,7 +51,8 @@
     "step": {
       "init": {
         "data": {
-          "timeout": "Polling interval (seconds)",
+          "connection_timeout": "Connection timeout (seconds)",
+          "poll_interval_sec": "Update interval (seconds)",
           "energy_group_id": "Energy group id (optional)",
           "energy_group_total_history_master": "Total history master for this energy group",
           "poll_interval_state_sec": "State polling interval (seconds)",
@@ -74,7 +78,7 @@
         },
         "entity_id": {
           "name": "Target sensor (optional)",
-          "description": "If set, only this Daikin energy sensor is updated."
+          "description": "If set, only the config entry that owns this entity runs the service (faster than scanning every device)."
         },
         "insert_missing": {
           "name": "Insert missing hourly rows",
@@ -175,13 +179,13 @@
         "name": "Heat energy consumption"
       },
       "pydaikin_daily_poll_errors": {
-        "name": "Pydaikin daily poll errors"
+        "name": "Daily communication errors (total)"
       },
       "pydaikin_daily_state_poll_errors": {
-        "name": "Pydaikin daily state poll errors"
+        "name": "Daily state update errors"
       },
       "pydaikin_daily_energy_poll_errors": {
-        "name": "Pydaikin daily energy poll errors"
+        "name": "Daily energy update errors"
       },
       "inside_temperature": {
         "name": "Inside temperature"
