@@ -7,7 +7,7 @@ A custom integration for Home Assistant to locally control Daikin air conditione
 - **Full Climate Control**: Mode (Heat, Cool, Dry, Auto, Fan Only), target temperature, fan speed, and swing modes.
 - **Zone Management**: Full support for ducted systems with individual zone control (On/Off and temperature if supported).
 - **Energy Management**: 
-  - **Segmented tracking**: Heat / cool / total energy sensors per unit with `state_class=total_increasing` where applicable; daily kWh counters also expose **`last_reset`** at local midnight for Energy / recorder consistency.
+  - **Segmented tracking**: Heat / cool / total energy sensors per unit with `state_class=total_increasing` where applicable (Home Assistant does not allow `last_reset` on `total_increasing`; daily resets are reflected as counter drops in the state).
   - **Optional auto history sync** (off by default): reuses Daikin hourly data to correct recent long-term statistics **once per local hour**, integrated into the normal polling loop.
   - **Manual correction**: Services `daikin_local.sync_history` and `daikin_local.sync_total_history` to backfill or fix delayed Daikin data on demand.
 - **Diagnostics**:
