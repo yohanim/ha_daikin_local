@@ -1,4 +1,10 @@
-"""Diagnostics downloads for config entries and devices (Home Assistant UI)."""
+"""Diagnostics downloads for config entries and devices (Home Assistant UI).
+
+Avoid importing ``coordinator`` (or other heavy integration modules) at module
+load time: Home Assistant loads this file via ``import_module`` on the event
+loop; chaining into ``coordinator`` pulls pydaikin/recorder and triggers
+blocking-call warnings. Runtime is handled via duck typing.
+"""
 
 from __future__ import annotations
 
@@ -23,7 +29,6 @@ from .const import (
     KEY_MAC,
     KEY_SUPPORTS_ENERGY,
 )
-from .coordinator import DaikinCoordinator
 
 # https://developers.home-assistant.io/docs/core/integration_diagnostics/
 REDACT_KEYS = frozenset({CONF_HOST, KEY_MAC, CONF_ENERGY_GROUP_ID})
@@ -39,24 +44,53 @@ def _integration_version() -> str:
         return "unknown"
 
 
-def _coordinator_dict(coordinator: DaikinCoordinator) -> dict[str, Any]:
-    """Non-sensitive runtime state for support tickets."""
-    vals = coordinator.device.values
+def _is_coordinator_runtime(obj: object) -> bool:
+    """True if ``obj`` is our Daikin DataUpdateCoordinator (duck typing, no import)."""
+    if obj is None:
+        return False
+    return all(
+        hasattr(obj, attr)
+        for attr in (
+            "device",
+            "update_interval",
+            "last_update_success",
+            "daily_polling_error_count",
+        )
+    )
+
+
+def _coordinator_snapshot(runtime: object) -> dict[str, Any] | None:
+    """Non-sensitive runtime state; ``runtime`` is DaikinCoordinator (duck typed)."""
+    if not _is_coordinator_runtime(runtime):
+        return None
+    device = getattr(runtime, "device", None)
+    if device is None:
+        return None
+    vals = getattr(device, "values", None) or {}
+    ui = getattr(runtime, "update_interval", None)
     return {
-        "update_interval_seconds": coordinator.update_interval.total_seconds()
-        if coordinator.update_interval
-        else None,
-        "last_update_success": coordinator.last_update_success,
-        "consecutive_communication_failures": coordinator.consecutive_communication_failures,
-        "poll_cooldown_until_utc": coordinator.poll_cooldown_until_iso,
-        "state_domain_interval_seconds": coordinator.state_domain_interval_seconds,
-        "energy_domain_interval_seconds": coordinator.energy_domain_interval_seconds,
-        "daily_polling_error_count": coordinator.daily_polling_error_count,
-        "daily_state_polling_error_count": coordinator.daily_state_polling_error_count,
-        "daily_energy_polling_error_count": coordinator.daily_energy_polling_error_count,
+        "update_interval_seconds": ui.total_seconds() if ui is not None else None,
+        "last_update_success": getattr(runtime, "last_update_success", None),
+        "consecutive_communication_failures": getattr(
+            runtime, "consecutive_communication_failures", None
+        ),
+        "poll_cooldown_until_utc": getattr(runtime, "poll_cooldown_until_iso", None),
+        "state_domain_interval_seconds": getattr(
+            runtime, "state_domain_interval_seconds", None
+        ),
+        "energy_domain_interval_seconds": getattr(
+            runtime, "energy_domain_interval_seconds", None
+        ),
+        "daily_polling_error_count": getattr(runtime, "daily_polling_error_count", None),
+        "daily_state_polling_error_count": getattr(
+            runtime, "daily_state_polling_error_count", None
+        ),
+        "daily_energy_polling_error_count": getattr(
+            runtime, "daily_energy_polling_error_count", None
+        ),
         "device_api": {
-            "model": vals.get("model"),
-            "firmware_ver": vals.get("ver"),
+            "model": vals.get("model") if isinstance(vals, dict) else None,
+            "firmware_ver": vals.get("ver") if isinstance(vals, dict) else None,
         },
     }
 
@@ -85,10 +119,8 @@ async def async_get_config_entry_diagnostics(
     }
 
     runtime = getattr(entry, "runtime_data", None)
-    if isinstance(runtime, DaikinCoordinator):
-        data["coordinator"] = _coordinator_dict(runtime)
-    else:
-        data["coordinator"] = None
+    snap = _coordinator_snapshot(runtime) if runtime is not None else None
+    data["coordinator"] = snap
 
     return data
 
@@ -116,11 +148,14 @@ async def async_get_device_diagnostics(
     }
 
     runtime = getattr(entry, "runtime_data", None)
-    if isinstance(runtime, DaikinCoordinator):
-        expected = dr.format_mac(runtime.device.mac)
-        base["device_registry"]["matches_runtime_mac"] = any(
-            ctype == CONNECTION_NETWORK_MAC and cval == expected
-            for ctype, cval in device.connections
-        )
+    if _is_coordinator_runtime(runtime):
+        device_obj = getattr(runtime, "device", None)
+        mac = getattr(device_obj, "mac", None) if device_obj is not None else None
+        if isinstance(mac, str) and mac:
+            expected = dr.format_mac(mac)
+            base["device_registry"]["matches_runtime_mac"] = any(
+                ctype == CONNECTION_NETWORK_MAC and cval == expected
+                for ctype, cval in device.connections
+            )
 
     return base
