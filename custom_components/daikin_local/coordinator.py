@@ -891,7 +891,16 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             def _aggregate_all_devices_cool_heat(
                 target_days_ago: int,
             ) -> list[int] | None:
-                """Build a total series by summing cool+heat for a group of devices."""
+                """Sum hourly cool+heat across adapters in the same energy cohort.
+
+                Cohort rules (must match ``sync_total_history`` / service expectations):
+                - If this entry has a non-empty ``energy_group_id``, include every
+                  loaded ``daikin_local`` entry with the **same** id (after strip).
+                - If this entry has **no** group id, include only entries that also
+                  have no group id (standalone / ungrouped pool).
+
+                Skips entries without ``runtime_data`` (not loaded).
+                """
                 aggregate = [0] * 24
                 found = False
                 group_id = (
@@ -901,11 +910,9 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 for entry in self.hass.config_entries.async_entries(DOMAIN):
                     other_group = (entry.options.get(CONF_ENERGY_GROUP_ID) or "").strip()
                     if group_id:
-                        # Group-scoped aggregation: only same-group entries.
                         if other_group != group_id:
                             continue
                     else:
-                        # Ungrouped aggregation: only entries without a group id.
                         if other_group:
                             continue
                     runtime = getattr(entry, "runtime_data", None)

@@ -10,6 +10,6 @@
   "issue_tracker": "https://github.com/yohanim/ha_daikin_local/issues",
   "loggers": ["pydaikin"],
   "requirements": ["pydaikin==2.18.1"],
-  "version": "1.5.5",
+  "version": "1.5.6",
   "zeroconf": ["_dkapi._tcp.local."]
 }
