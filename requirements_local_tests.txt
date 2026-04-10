@@ -4,3 +4,5 @@
 #
 # (``voluptuous`` is also pulled in by ``homeassistant`` when using requirements_test.txt.)
 voluptuous>=0.15.0
+# Recognizes ``asyncio_mode`` in pyproject.toml (harness tests use async; local tests do not).
+pytest-asyncio>=1.3.0

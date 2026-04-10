@@ -13,5 +13,8 @@
 # when you bump hacs.json / Core target (see PyPI release notes for the package).
 pytest-homeassistant-custom-component==0.13.320
 
+# pytest 9 + async harness (explicit so the plugin is always available to the runner).
+pytest-asyncio>=1.3.0
+
 # Same pin as ``custom_components/daikin_local/manifest.json`` (coordinator imports pydaikin).
 pydaikin==2.18.1
