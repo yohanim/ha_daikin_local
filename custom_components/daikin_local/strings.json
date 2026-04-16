@@ -40,9 +40,10 @@
           "auto_history_sync": "Hourly auto-sync of energy statistics to the recorder",
           "insert_missing": "Allow inserting missing hourly statistics rows",
           "history_skip_extra_hours": "Additional hours to skip (current hour is always skipped)",
-          "history_hours_to_correct": "Number of previous hours to correct"
+          "history_hours_to_correct": "Number of previous hours to correct",
+          "history_auto_sync_grace_minutes": "Wait this many minutes after each full hour before auto history sync (local time)"
         },
-        "description": "Connection timeout and update interval can override the values from initial setup when set here. For BRP069 adapters with energy support, scheduling uses state vs energy intervals instead of a single global interval. Auto history sync runs after energy refreshes: LTS correction is attempted at most once per local hour (retried on the next energy refresh if it fails). Insert missing: when correcting history, allow creating LTS rows for hours that do not exist yet (may rarely conflict with the recorder; services can override per call).",
+        "description": "Connection timeout and update interval can override the values from initial setup when set here. For BRP069 adapters with energy support, scheduling uses state vs energy intervals instead of a single global interval. Auto history sync runs after energy refreshes: LTS correction is attempted at most once per local hour (retried on the next energy refresh if it fails). Use the grace period to skip the first minutes of each hour so Daikin or the recorder can settle after the boundary. Insert missing: when correcting history, allow creating LTS rows for hours that do not exist yet (may rarely conflict with the recorder; services can override per call).",
         "title": "Daikin AC options"
       }
     }
@@ -60,7 +61,8 @@
           "auto_history_sync": "Hourly auto-sync of energy statistics to the recorder",
           "insert_missing": "Allow inserting missing hourly statistics rows",
           "history_skip_extra_hours": "Additional hours to skip (current hour is always skipped)",
-          "history_hours_to_correct": "Number of previous hours to correct"
+          "history_hours_to_correct": "Number of previous hours to correct",
+          "history_auto_sync_grace_minutes": "Wait this many minutes after each full hour before auto history sync (local time)"
         },
         "description": "Manage Daikin Local options.",
         "title": "Daikin AC options"

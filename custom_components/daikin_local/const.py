@@ -58,6 +58,8 @@ CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER = "energy_group_total_history_master"
 # - hours_to_correct: number of hours to attempt correction for, right before the skipped range.
 CONF_HISTORY_SKIP_EXTRA_HOURS = "history_skip_extra_hours"
 CONF_HISTORY_HOURS_TO_CORRECT = "history_hours_to_correct"
+# Auto history only: skip sync during the first N local clock minutes of each hour (0 = off).
+CONF_HISTORY_AUTO_SYNC_GRACE_MINUTES = "history_auto_sync_grace_minutes"
 
 ZONE_NAME_UNCONFIGURED = "-"
 

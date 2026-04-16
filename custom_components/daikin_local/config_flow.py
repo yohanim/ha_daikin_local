@@ -32,6 +32,7 @@ from .const import (
     CONF_CONNECTION_TIMEOUT,
     CONF_ENERGY_GROUP_ID,
     CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER,
+    CONF_HISTORY_AUTO_SYNC_GRACE_MINUTES,
     CONF_HISTORY_HOURS_TO_CORRECT,
     CONF_HISTORY_SKIP_EXTRA_HOURS,
     CONF_INSERT_MISSING,
@@ -316,6 +317,9 @@ class OptionsFlowHandler(OptionsFlow):
             CONF_HISTORY_HOURS_TO_CORRECT: self.config_entry.options.get(
                 CONF_HISTORY_HOURS_TO_CORRECT, 3
             ),
+            CONF_HISTORY_AUTO_SYNC_GRACE_MINUTES: self.config_entry.options.get(
+                CONF_HISTORY_AUTO_SYNC_GRACE_MINUTES, 0
+            ),
         }
 
         schema_dict: dict = {
@@ -392,6 +396,18 @@ class OptionsFlowHandler(OptionsFlow):
                         "step": 1,
                         "mode": "slider",
                         "unit_of_measurement": "h",
+                    }
+                ),
+                vol.Optional(
+                    CONF_HISTORY_AUTO_SYNC_GRACE_MINUTES,
+                    default=0,
+                ): selector.NumberSelector(
+                    {
+                        "min": 0,
+                        "max": 59,
+                        "step": 1,
+                        "mode": "box",
+                        "unit_of_measurement": "min",
                     }
                 ),
             }

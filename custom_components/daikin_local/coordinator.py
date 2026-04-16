@@ -33,6 +33,7 @@ from .pure import (
     connection_timeout_sec,
     coordinator_poll_interval_sec,
     domain_poll_intervals_sec,
+    history_auto_sync_deferred_by_grace,
     history_window_from_entry_and_overrides as _history_window_from_entry_and_overrides,
     lts_row_start_to_datetime_non_str,
     recent_completed_hours_by_local_date as _recent_completed_hours_by_local_date_pure,
@@ -334,7 +335,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             return True
         return False
 
-    async def _async_maybe_auto_history_sync(self) -> None:
+    async def _async_maybe_auto_history_sync(self, now_local: datetime) -> None:
         """After a successful poll, optionally correct LTS (same schedule as polling).
 
         At most one successful sync per local clock hour; retries on later polls if needed.
@@ -348,6 +349,9 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
         # If we've already synced successfully for this local hour, do nothing.
         if self._auto_history_synced_ok:
+            return
+
+        if history_auto_sync_deferred_by_grace(now_local, self.config_entry.options):
             return
 
         try:
@@ -536,7 +540,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             if self._auto_history_local_slot != slot:
                 self._auto_history_local_slot = slot
                 self._auto_history_synced_ok = False
-            await self._async_maybe_auto_history_sync()
+            await self._async_maybe_auto_history_sync(now_local)
         return data
 
     def _get_sum_from_daikin_key(self, daikin_key: str) -> float:

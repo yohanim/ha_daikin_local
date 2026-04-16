@@ -40,9 +40,10 @@
           "auto_history_sync": "Synchronisation automatique horaire des stats d'énergie (recorder)",
           "insert_missing": "Autoriser l'insertion des créneaux horaires manquants (stats)",
           "history_skip_extra_hours": "Heures supplémentaires à ignorer (l'heure en cours est toujours ignorée)",
-          "history_hours_to_correct": "Nombre d'heures précédentes à corriger"
+          "history_hours_to_correct": "Nombre d'heures précédentes à corriger",
+          "history_auto_sync_grace_minutes": "Minutes d'attente après chaque heure pleine avant la synchro auto (heure locale)"
         },
-        "description": "Le délai de connexion et l'intervalle de mise à jour peuvent remplacer les valeurs définies à l'ajout. Pour les BRP069 avec énergie, la planification utilise les intervalles état et énergie plutôt qu'un seul intervalle global. La synchro auto d'historique s'exécute après les rafraîchissements énergie : correction LTS au plus une fois par heure locale (nouvelle tentative au prochain rafraîchissement énergie si échec). « Insertion manquants » : autoriser la création de lignes pour les heures sans donnée (rare conflit avec le recorder ; les services peuvent surcharger).",
+        "description": "Le délai de connexion et l'intervalle de mise à jour peuvent remplacer les valeurs définies à l'ajout. Pour les BRP069 avec énergie, la planification utilise les intervalles état et énergie plutôt qu'un seul intervalle global. La synchro auto d'historique s'exécute après les rafraîchissements énergie : correction LTS au plus une fois par heure locale (nouvelle tentative au prochain rafraîchissement énergie si échec). « Délai après l'heure » : ne pas corriger pendant les premières minutes de chaque heure (laisse le temps à Daikin ou au recorder après le passage à l'heure). « Insertion manquants » : autoriser la création de lignes pour les heures sans donnée (rare conflit avec le recorder ; les services peuvent surcharger).",
         "title": "Options Daikin"
       }
     }
@@ -60,7 +61,8 @@
           "auto_history_sync": "Synchronisation automatique horaire des stats d'énergie (recorder)",
           "insert_missing": "Autoriser l'insertion des créneaux horaires manquants (stats)",
           "history_skip_extra_hours": "Heures supplémentaires à ignorer (l'heure en cours est toujours ignorée)",
-          "history_hours_to_correct": "Nombre d'heures précédentes à corriger"
+          "history_hours_to_correct": "Nombre d'heures précédentes à corriger",
+          "history_auto_sync_grace_minutes": "Minutes d'attente après chaque heure pleine avant la synchro auto (heure locale)"
         },
         "description": "Gérer les options de Daikin Local.",
         "title": "Options Daikin"

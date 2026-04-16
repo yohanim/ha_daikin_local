@@ -15,6 +15,7 @@ from .const import (
     CONF_CONNECTION_TIMEOUT,
     CONF_ENERGY_GROUP_ID,
     CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER,
+    CONF_HISTORY_AUTO_SYNC_GRACE_MINUTES,
     CONF_HISTORY_HOURS_TO_CORRECT,
     CONF_HISTORY_SKIP_EXTRA_HOURS,
     CONF_INSERT_MISSING,
@@ -98,6 +99,20 @@ def history_window_from_entry_and_overrides(
     else:
         hours_to_correct = int(options.get(CONF_HISTORY_HOURS_TO_CORRECT, 3))
     return skip_hours, hours_to_correct, clamp
+
+
+def history_auto_sync_deferred_by_grace(
+    now_local: datetime, options: dict
+) -> bool:
+    """Return True if auto history sync should wait (start-of-hour grace period)."""
+    raw = options.get(CONF_HISTORY_AUTO_SYNC_GRACE_MINUTES, 0)
+    try:
+        grace = max(0, min(59, int(raw)))
+    except (TypeError, ValueError):
+        grace = 0
+    if grace <= 0:
+        return False
+    return now_local.minute < grace
 
 
 def lts_row_start_to_datetime_non_str(

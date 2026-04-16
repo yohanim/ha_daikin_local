@@ -16,6 +16,7 @@ from custom_components.daikin_local.const import (  # noqa: E402
     CONF_ENERGY_GROUP_ID,
     CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER,
     CONF_CONNECTION_TIMEOUT,
+    CONF_HISTORY_AUTO_SYNC_GRACE_MINUTES,
     CONF_HISTORY_HOURS_TO_CORRECT,
     CONF_HISTORY_SKIP_EXTRA_HOURS,
     CONF_POLL_INTERVAL_ENERGY_SEC,
@@ -30,6 +31,7 @@ from custom_components.daikin_local.pure import (  # noqa: E402
     coordinator_poll_interval_sec,
     domain_poll_intervals_sec,
     group_has_master,
+    history_auto_sync_deferred_by_grace,
     history_skip_hours_from_options,
     history_window_from_entry_and_overrides,
     lts_row_start_to_datetime_non_str,
@@ -114,6 +116,19 @@ def test_history_window_uses_entry_when_no_service_override() -> None:
     assert clamp is True
     assert skip == 2
     assert correct == 3
+
+
+def test_history_auto_sync_grace_defers_start_of_hour() -> None:
+    t = datetime(2026, 4, 16, 14, 4, tzinfo=timezone.utc)
+    opts = {CONF_HISTORY_AUTO_SYNC_GRACE_MINUTES: 10}
+    assert history_auto_sync_deferred_by_grace(t, opts) is True
+    t_ok = datetime(2026, 4, 16, 14, 10, 0, tzinfo=timezone.utc)
+    assert history_auto_sync_deferred_by_grace(t_ok, opts) is False
+
+
+def test_history_auto_sync_grace_zero_never_defers() -> None:
+    t = datetime(2026, 4, 16, 14, 0, tzinfo=timezone.utc)
+    assert history_auto_sync_deferred_by_grace(t, {}) is False
 
 
 def test_connection_timeout_fallback() -> None:
