@@ -55,7 +55,8 @@ CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER = "energy_group_total_history_master"
 # - skip_extra_hours: number of *additional* most recent local hours to ignore,
 #   besides the current hour which is always skipped.
 #   Example: 1 = skip current hour + 1 previous hour (effectively skip 2 hours).
-# - hours_to_correct: number of hours to attempt correction for, right before the skipped range.
+# - hours_to_correct: number of hours to attempt correction for, right before the
+#   skipped range (0 = do not correct any completed hour).
 CONF_HISTORY_SKIP_EXTRA_HOURS = "history_skip_extra_hours"
 CONF_HISTORY_HOURS_TO_CORRECT = "history_hours_to_correct"
 # Auto history only: skip sync during the first N local clock minutes of each hour (0 = off).

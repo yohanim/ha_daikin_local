@@ -379,7 +379,7 @@ class OptionsFlowHandler(OptionsFlow):
                     default=1,
                 ): selector.NumberSelector(
                     {
-                        "min": 1,
+                        "min": 0,
                         "max": 12,
                         "step": 1,
                         "mode": "slider",
@@ -391,7 +391,7 @@ class OptionsFlowHandler(OptionsFlow):
                     default=3,
                 ): selector.NumberSelector(
                     {
-                        "min": 1,
+                        "min": 0,
                         "max": 24,
                         "step": 1,
                         "mode": "slider",

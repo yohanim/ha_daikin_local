@@ -56,7 +56,7 @@ def recent_completed_hours_by_local_date(
     """
     if clamp:
         skip_hours = max(1, int(skip_hours))
-        hours_to_correct = max(1, int(hours_to_correct))
+        hours_to_correct = max(0, int(hours_to_correct))
     else:
         skip_hours = int(skip_hours)
         hours_to_correct = int(hours_to_correct)

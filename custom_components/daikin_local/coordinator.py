@@ -607,6 +607,16 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 hours_to_correct=hours_to_correct,
                 clamp=window_clamp,
             )
+            if not recent_hours_by_date:
+                _LOGGER.debug(
+                    "[energy/history] No hourly slots to correct for %s "
+                    "(hours_to_correct=%s, backfill_extra=%s)",
+                    self.name,
+                    hours_to_correct,
+                    self._history_backfill_extra_hour,
+                )
+                return
+
             today_start = dt_util.start_of_local_day()
             today_date = today_start.date()
             yesterday_date = (today_start - timedelta(days=1)).date()
@@ -787,6 +797,16 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 hours_to_correct=hours_to_correct,
                 clamp=window_clamp,
             )
+            if not recent_hours_by_date:
+                _LOGGER.debug(
+                    "[energy/history] No hourly slots for total history for %s "
+                    "(hours_to_correct=%s, backfill_extra=%s)",
+                    self.name,
+                    hours_to_correct,
+                    self._history_backfill_extra_hour,
+                )
+                return
+
             today_start = dt_util.start_of_local_day()
             today_date = today_start.date()
             yesterday_date = (today_start - timedelta(days=1)).date()

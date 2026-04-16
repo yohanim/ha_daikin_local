@@ -185,6 +185,30 @@ def test_recent_completed_hours_mapping_fixed_now() -> None:
     assert 12 in hours and 11 in hours and 10 in hours
 
 
+def test_recent_completed_hours_zero_to_correct_yields_empty_when_no_backfill() -> None:
+    now = datetime(2024, 6, 15, 14, 30, tzinfo=timezone.utc)
+    m = recent_completed_hours_by_local_date(
+        now,
+        skip_hours=2,
+        hours_to_correct=0,
+        clamp=True,
+    )
+    assert m == {}
+
+
+def test_recent_completed_hours_zero_to_correct_with_extra_hour() -> None:
+    now = datetime(2024, 6, 15, 14, 30, tzinfo=timezone.utc)
+    m = recent_completed_hours_by_local_date(
+        now,
+        include_extra_hour=True,
+        skip_hours=2,
+        hours_to_correct=0,
+        clamp=True,
+    )
+    day = now.date()
+    assert m.get(day, set()) == {12}
+
+
 def test_service_schema_empty() -> None:
     schema = build_service_schema(vol.Coerce(bool))
     out = schema({})
