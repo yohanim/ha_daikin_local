@@ -195,6 +195,12 @@
       "pydaikin_daily_energy_poll_errors": {
         "name": "Erreurs quotidiennes de mise à jour (énergie)"
       },
+      "pydaikin_state_domain_response_time": {
+        "name": "Temps de réponse du domaine état"
+      },
+      "pydaikin_energy_domain_response_time": {
+        "name": "Temps de réponse du domaine énergie"
+      },
       "compressor_frequency": {
         "name": "Fréquence du compresseur"
       },

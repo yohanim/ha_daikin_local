@@ -17,9 +17,11 @@ from homeassistant.const import (
     UnitOfFrequency,
     UnitOfPower,
     UnitOfTemperature,
+    UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from pydaikin.daikin_brp069 import DaikinBRP069
 
 from .const import (
     ATTR_COMPRESSOR_FREQUENCY,
@@ -49,6 +51,14 @@ class DaikinDiagnosticSensorEntityDescription(SensorEntityDescription):
     """Diagnostics: integer counters read live from the coordinator (not from DaikinData)."""
 
     value_from_coordinator: Callable[[DaikinCoordinator], int]
+
+
+@dataclass(frozen=True, kw_only=True)
+class DaikinDiagnosticDurationSensorEntityDescription(SensorEntityDescription):
+    """Diagnostics: last successful ``update_status`` duration per pydaikin domain (seconds)."""
+
+    value_from_coordinator: Callable[[DaikinCoordinator], float | None]
+    requires_brp069_energy: bool = False
 
 
 SENSOR_TYPES: tuple[DaikinSensorEntityDescription, ...] = (
@@ -177,6 +187,32 @@ DIAGNOSTIC_SENSOR_TYPES: tuple[DaikinDiagnosticSensorEntityDescription, ...] = (
     ),
 )
 
+DIAGNOSTIC_DURATION_SENSOR_TYPES: tuple[
+    DaikinDiagnosticDurationSensorEntityDescription, ...
+] = (
+    DaikinDiagnosticDurationSensorEntityDescription(
+        key="pydaikin_state_domain_response_time",
+        translation_key="pydaikin_state_domain_response_time",
+        device_class=SensorDeviceClass.DURATION,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTime.SECONDS,
+        suggested_display_precision=3,
+        entity_registry_enabled_default=False,
+        value_from_coordinator=lambda c: c.last_state_domain_response_sec,
+    ),
+    DaikinDiagnosticDurationSensorEntityDescription(
+        key="pydaikin_energy_domain_response_time",
+        translation_key="pydaikin_energy_domain_response_time",
+        device_class=SensorDeviceClass.DURATION,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTime.SECONDS,
+        suggested_display_precision=3,
+        entity_registry_enabled_default=False,
+        value_from_coordinator=lambda c: c.last_energy_domain_response_sec,
+        requires_brp069_energy=True,
+    ),
+)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -187,7 +223,9 @@ async def async_setup_entry(
     coordinator = entry.runtime_data
     device = coordinator.device
 
-    entities: list[DaikinSensor | DaikinDiagnosticSensor] = []
+    entities: list[
+        DaikinSensor | DaikinDiagnosticSensor | DaikinDiagnosticDurationSensor
+    ] = []
 
     for description in SENSOR_TYPES:
         supported = False
@@ -213,6 +251,13 @@ async def async_setup_entry(
 
     for description in DIAGNOSTIC_SENSOR_TYPES:
         entities.append(DaikinDiagnosticSensor(coordinator, description))
+
+    for description in DIAGNOSTIC_DURATION_SENSOR_TYPES:
+        if description.requires_brp069_energy and not (
+            isinstance(device, DaikinBRP069) and device.support_energy_consumption
+        ):
+            continue
+        entities.append(DaikinDiagnosticDurationSensor(coordinator, description))
 
     async_add_entities(entities)
 
@@ -271,4 +316,31 @@ class DaikinDiagnosticSensor(DaikinEntity, SensorEntity):
     @property
     def native_value(self) -> int:
         """Return the current diagnostic counter (always defined; defaults apply before first poll)."""
+        return self.entity_description.value_from_coordinator(self.coordinator)
+
+
+class DaikinDiagnosticDurationSensor(DaikinEntity, SensorEntity):
+    """Diagnostics: last poll duration per pydaikin domain (seconds)."""
+
+    entity_description: DaikinDiagnosticDurationSensorEntityDescription
+
+    def __init__(
+        self,
+        coordinator: DaikinCoordinator,
+        description: DaikinDiagnosticDurationSensorEntityDescription,
+    ) -> None:
+        """Initialize the diagnostic duration sensor."""
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._attr_unique_id = f"{self.device.mac}-{description.key}"
+        self._attr_translation_key = description.translation_key
+
+    @property
+    def suggested_object_id(self) -> str | None:
+        """Suffix only: HA prepends device slug."""
+        return self.entity_description.key
+
+    @property
+    def native_value(self) -> float | None:
+        """Return last successful domain poll duration in seconds, or unknown before first poll."""
         return self.entity_description.value_from_coordinator(self.coordinator)

@@ -189,6 +189,12 @@
       "pydaikin_daily_energy_poll_errors": {
         "name": "Daily energy update errors"
       },
+      "pydaikin_state_domain_response_time": {
+        "name": "State domain response time"
+      },
+      "pydaikin_energy_domain_response_time": {
+        "name": "Energy domain response time"
+      },
       "inside_temperature": {
         "name": "Inside temperature"
       },

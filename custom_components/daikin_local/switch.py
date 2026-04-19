@@ -66,13 +66,15 @@ class DaikinZoneSwitch(DaikinEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the zone on."""
-        await self.device.set_zone(self._zone_id, "zone_onoff", "1")
+        async with self.coordinator.pydaikin_communication_lock:
+            await self.device.set_zone(self._zone_id, "zone_onoff", "1")
         self.async_write_ha_state()
         await self.coordinator.async_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the zone off."""
-        await self.device.set_zone(self._zone_id, "zone_onoff", "0")
+        async with self.coordinator.pydaikin_communication_lock:
+            await self.device.set_zone(self._zone_id, "zone_onoff", "0")
         self.async_write_ha_state()
         await self.coordinator.async_refresh()
 
@@ -104,13 +106,15 @@ class DaikinStreamerSwitch(DaikinEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the zone on."""
-        await self.device.set_streamer("on")
+        async with self.coordinator.pydaikin_communication_lock:
+            await self.device.set_streamer("on")
         self.async_write_ha_state()
         await self.coordinator.async_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the zone off."""
-        await self.device.set_streamer("off")
+        async with self.coordinator.pydaikin_communication_lock:
+            await self.device.set_streamer("off")
         self.async_write_ha_state()
         await self.coordinator.async_refresh()
 
@@ -136,12 +140,14 @@ class DaikinToggleSwitch(DaikinEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the zone on."""
-        await self.device.set({})
+        async with self.coordinator.pydaikin_communication_lock:
+            await self.device.set({})
         self.async_write_ha_state()
         await self.coordinator.async_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the zone off."""
-        await self.device.set({DAIKIN_ATTR_MODE: "off"})
+        async with self.coordinator.pydaikin_communication_lock:
+            await self.device.set({DAIKIN_ATTR_MODE: "off"})
         self.async_write_ha_state()
         await self.coordinator.async_refresh()

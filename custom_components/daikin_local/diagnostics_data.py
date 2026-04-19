@@ -81,6 +81,12 @@ def _coordinator_snapshot(runtime: object) -> dict[str, Any] | None:
         "daily_energy_polling_error_count": getattr(
             runtime, "daily_energy_polling_error_count", None
         ),
+        "last_state_domain_response_sec": getattr(
+            runtime, "last_state_domain_response_sec", None
+        ),
+        "last_energy_domain_response_sec": getattr(
+            runtime, "last_energy_domain_response_sec", None
+        ),
         "device_api": {
             "model": vals.get("model") if isinstance(vals, dict) else None,
             "firmware_ver": vals.get("ver") if isinstance(vals, dict) else None,

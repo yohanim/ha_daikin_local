@@ -256,7 +256,8 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
                     )
 
         if values:
-            await self.device.set(values)
+            async with self.coordinator.pydaikin_communication_lock:
+                await self.device.set(values)
             self.async_write_ha_state()
             await self.coordinator.async_refresh()
 
@@ -352,26 +353,33 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set preset mode."""
+        lock = self.coordinator.pydaikin_communication_lock
         if preset_mode == PRESET_AWAY:
-            await self.device.set_holiday(ATTR_STATE_ON)
+            async with lock:
+                await self.device.set_holiday(ATTR_STATE_ON)
         elif preset_mode == PRESET_BOOST:
-            await self.device.set_advanced_mode(
-                HA_PRESET_TO_DAIKIN[PRESET_BOOST], ATTR_STATE_ON
-            )
+            async with lock:
+                await self.device.set_advanced_mode(
+                    HA_PRESET_TO_DAIKIN[PRESET_BOOST], ATTR_STATE_ON
+                )
         elif preset_mode == PRESET_ECO:
-            await self.device.set_advanced_mode(
-                HA_PRESET_TO_DAIKIN[PRESET_ECO], ATTR_STATE_ON
-            )
+            async with lock:
+                await self.device.set_advanced_mode(
+                    HA_PRESET_TO_DAIKIN[PRESET_ECO], ATTR_STATE_ON
+                )
         elif self.preset_mode == PRESET_AWAY:
-            await self.device.set_holiday(ATTR_STATE_OFF)
+            async with lock:
+                await self.device.set_holiday(ATTR_STATE_OFF)
         elif self.preset_mode == PRESET_BOOST:
-            await self.device.set_advanced_mode(
-                HA_PRESET_TO_DAIKIN[PRESET_BOOST], ATTR_STATE_OFF
-            )
+            async with lock:
+                await self.device.set_advanced_mode(
+                    HA_PRESET_TO_DAIKIN[PRESET_BOOST], ATTR_STATE_OFF
+                )
         elif self.preset_mode == PRESET_ECO:
-            await self.device.set_advanced_mode(
-                HA_PRESET_TO_DAIKIN[PRESET_ECO], ATTR_STATE_OFF
-            )
+            async with lock:
+                await self.device.set_advanced_mode(
+                    HA_PRESET_TO_DAIKIN[PRESET_ECO], ATTR_STATE_OFF
+                )
         self.async_write_ha_state()
         await self.coordinator.async_refresh()
 
@@ -392,13 +400,15 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
 
     async def async_turn_on(self) -> None:
         """Turn device on."""
-        await self.device.set({"pow": "1"})
+        async with self.coordinator.pydaikin_communication_lock:
+            await self.device.set({"pow": "1"})
         self.async_write_ha_state()
         await self.coordinator.async_refresh()
 
     async def async_turn_off(self) -> None:
         """Turn device off."""
-        await self.device.set({"pow": "0"})
+        async with self.coordinator.pydaikin_communication_lock:
+            await self.device.set({"pow": "0"})
         self.async_write_ha_state()
         await self.coordinator.async_refresh()
 
@@ -527,7 +537,8 @@ class DaikinZoneClimate(DaikinEntity, ClimateEntity):
 
         zone_value = str(round(temperature_value))
         try:
-            await self.device.set_zone(self._zone_id, zone_key, zone_value)
+            async with self.coordinator.pydaikin_communication_lock:
+                await self.device.set_zone(self._zone_id, zone_key, zone_value)
         except (AttributeError, KeyError, NotImplementedError, TypeError) as err:
             raise _zone_error("zone_set_failed") from err
 
