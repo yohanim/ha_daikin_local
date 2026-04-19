@@ -31,6 +31,8 @@ bilingual release notes. Bump manifest to 1.6.1.
 ## Release titles (GitHub / tags)
 
 - Write **release titles in English**.
+- A title that is **only** a version number (e.g. `Daikin Local 1.6.4`) is **not useful** for readers scanning releases. Always include a **short summary of what the release delivers** (user-visible value, risk, or headline change). The version may appear **together with** that summary, not alone.
+- When proposing or writing a release title for the user, default to: **`{version or product} — {condensed benefit}`** or **`{version}: {condensed benefit}`** (one line, scannable).
 - When a version appears in a title, keep it consistent with the manifest or tag you publish.
 
 ## Release notes
