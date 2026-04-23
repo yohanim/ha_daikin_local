@@ -93,6 +93,21 @@ def _ensure_recorder_statistics_api() -> bool:
 
 _LOGGER = logging.getLogger(__name__)
 
+
+def _format_communication_error(err: Exception) -> str:
+    """Human-readable exception detail for logs (pydaikin / aiohttp often differ)."""
+    name = type(err).__name__
+    msg = str(err).strip()
+    if msg:
+        return f"{name}: {msg}"
+    return f"{name}: {err!r}"
+
+
+def _poll_duration_sec_since(start_mono: float, *, cap_sec: float) -> float:
+    """Elapsed seconds since ``start_mono``, capped (e.g. to connection timeout)."""
+    return round(min(time.monotonic() - start_mono, cap_sec), 3)
+
+
 type DaikinConfigEntry = ConfigEntry[DaikinCoordinator]
 
 
@@ -201,7 +216,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         self._history_sync_lock = asyncio.Lock()
         # Serialize all pydaikin HTTP traffic (polls and device.set* from entities).
         self._pydaikin_communication_lock = asyncio.Lock()
-        # Last successful update_status duration per BRP069 domain (seconds); None until first poll.
+        # Last update_status duration per BRP069 domain (seconds); None until first attempt.
         self._last_state_domain_response_sec: float | None = None
         self._last_energy_domain_response_sec: float | None = None
 
@@ -311,12 +326,19 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
     @property
     def last_state_domain_response_sec(self) -> float | None:
-        """Seconds for the last successful state-domain ``update_status`` (BRP069: sensor+control)."""
+        """Seconds for the last state-domain ``update_status`` attempt (success or failure).
+
+        Duration is capped to the configured connection timeout. Non-BRP069 devices
+        record full-device polls on this channel.
+        """
         return self._last_state_domain_response_sec
 
     @property
     def last_energy_domain_response_sec(self) -> float | None:
-        """Seconds for the last successful energy-domain ``update_status`` (BRP069 only)."""
+        """Seconds for the last energy-domain ``update_status`` attempt (BRP069 only).
+
+        Duration is capped to the configured connection timeout.
+        """
         return self._last_energy_domain_response_sec
 
     @property
@@ -415,8 +437,13 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 )
                 return self.data
 
-        brp069_state_attempted = False
         brp069_energy_attempted = False
+        # Which BRP069 ``update_status`` call was in flight when an error occurred
+        # (set immediately before each ``await``, cleared after success).
+        brp069_poll_domain: str | None = None
+        # Monotonic time at the start of the last ``update_status`` await (success or fail).
+        poll_t0_mono: float | None = None
+        timeout_f = float(timeout)
 
         try:
             async with asyncio.timeout(timeout):
@@ -443,30 +470,37 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                                 "[coordinator] Updating %s via update_status (state minimal)",
                                 self.name,
                             )
-                            t0 = time.monotonic()
+                            brp069_poll_domain = "state"
+                            poll_t0_mono = time.monotonic()
                             await self.device.update_status(list(BRP069_STATE_RESOURCES))
-                            self._last_state_domain_response_sec = round(
-                                time.monotonic() - t0, 3
+                            brp069_poll_domain = None
+                            self._last_state_domain_response_sec = _poll_duration_sec_since(
+                                poll_t0_mono, cap_sec=timeout_f
                             )
+                            poll_t0_mono = None
                             self._brp069_last_state_poll_mono = now_mono
-                            brp069_state_attempted = True
                         elif state_due and energy_due:
                             _LOGGER.debug(
                                 "[coordinator] Updating %s via update_status (state then energy)",
                                 self.name,
                             )
-                            t0 = time.monotonic()
+                            brp069_poll_domain = "state"
+                            poll_t0_mono = time.monotonic()
                             await self.device.update_status(list(BRP069_STATE_RESOURCES))
-                            self._last_state_domain_response_sec = round(
-                                time.monotonic() - t0, 3
+                            brp069_poll_domain = None
+                            self._last_state_domain_response_sec = _poll_duration_sec_since(
+                                poll_t0_mono, cap_sec=timeout_f
                             )
+                            poll_t0_mono = None
                             self._brp069_last_state_poll_mono = now_mono
-                            brp069_state_attempted = True
-                            t0 = time.monotonic()
+                            brp069_poll_domain = "energy"
+                            poll_t0_mono = time.monotonic()
                             await self.device.update_status(list(BRP069_ENERGY_RESOURCES))
-                            self._last_energy_domain_response_sec = round(
-                                time.monotonic() - t0, 3
+                            brp069_poll_domain = None
+                            self._last_energy_domain_response_sec = _poll_duration_sec_since(
+                                poll_t0_mono, cap_sec=timeout_f
                             )
+                            poll_t0_mono = None
                             self._brp069_last_energy_poll_mono = now_mono
                             brp069_energy_attempted = True
                         elif state_due:
@@ -474,41 +508,57 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                                 "[coordinator] Updating %s via update_status (state)",
                                 self.name,
                             )
-                            t0 = time.monotonic()
+                            brp069_poll_domain = "state"
+                            poll_t0_mono = time.monotonic()
                             await self.device.update_status(list(BRP069_STATE_RESOURCES))
-                            self._last_state_domain_response_sec = round(
-                                time.monotonic() - t0, 3
+                            brp069_poll_domain = None
+                            self._last_state_domain_response_sec = _poll_duration_sec_since(
+                                poll_t0_mono, cap_sec=timeout_f
                             )
+                            poll_t0_mono = None
                             self._brp069_last_state_poll_mono = now_mono
-                            brp069_state_attempted = True
                         else:
                             _LOGGER.debug(
                                 "[coordinator] Updating %s via update_status (energy)",
                                 self.name,
                             )
-                            t0 = time.monotonic()
+                            brp069_poll_domain = "energy"
+                            poll_t0_mono = time.monotonic()
                             await self.device.update_status(list(BRP069_ENERGY_RESOURCES))
-                            self._last_energy_domain_response_sec = round(
-                                time.monotonic() - t0, 3
+                            brp069_poll_domain = None
+                            self._last_energy_domain_response_sec = _poll_duration_sec_since(
+                                poll_t0_mono, cap_sec=timeout_f
                             )
+                            poll_t0_mono = None
                             self._brp069_last_energy_poll_mono = now_mono
                             brp069_energy_attempted = True
                     else:
                         _LOGGER.debug(
                             "[coordinator] Updating %s via pydaikin update_status()", self.name
                         )
-                        t0 = time.monotonic()
+                        poll_t0_mono = time.monotonic()
                         await self.device.update_status()
-                        self._last_state_domain_response_sec = round(
-                            time.monotonic() - t0, 3
+                        self._last_state_domain_response_sec = _poll_duration_sec_since(
+                            poll_t0_mono, cap_sec=timeout_f
                         )
+                        poll_t0_mono = None
         except Exception as err:
+            if poll_t0_mono is not None:
+                dur = _poll_duration_sec_since(poll_t0_mono, cap_sec=timeout_f)
+                if isinstance(self.device, DaikinBRP069):
+                    if brp069_poll_domain == "state":
+                        self._last_state_domain_response_sec = dur
+                    elif brp069_poll_domain == "energy":
+                        self._last_energy_domain_response_sec = dur
+                else:
+                    self._last_state_domain_response_sec = dur
             self._ensure_error_stats_date()
             self._daily_polling_error_count += 1
-            if brp069_state_attempted:
-                self._daily_state_poll_error_count += 1
-            if brp069_energy_attempted:
-                self._daily_energy_poll_error_count += 1
+            if isinstance(self.device, DaikinBRP069):
+                if brp069_poll_domain == "state":
+                    self._daily_state_poll_error_count += 1
+                elif brp069_poll_domain == "energy":
+                    self._daily_energy_poll_error_count += 1
             self._schedule_persist_error_stats()
             self._consecutive_poll_failures += 1
             # No explicit retry is scheduled here: polling already runs frequently.
@@ -521,14 +571,14 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             cooldown_s = min(300, 30 * self._consecutive_poll_failures)
             self._poll_cooldown_until = now + timedelta(seconds=cooldown_s)
 
-            domains = "state"
-            if isinstance(self.device, DaikinBRP069):
-                attempted: list[str] = []
-                if brp069_state_attempted:
-                    attempted.append("state")
-                if brp069_energy_attempted:
-                    attempted.append("energy")
-                domains = "+".join(attempted) if attempted else "state"
+            err_detail = _format_communication_error(err)
+            if isinstance(self.device, DaikinBRP069) and brp069_poll_domain in (
+                "state",
+                "energy",
+            ):
+                domains = brp069_poll_domain
+            else:
+                domains = "state"
 
             if self.data is not None and self._consecutive_poll_failures <= 3:
                 _LOGGER.warning(
@@ -536,7 +586,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                     "serving cached data, cooldown=%ss (failure #%s)",
                     domains,
                     self.name,
-                    err,
+                    err_detail,
                     cooldown_s,
                     self._consecutive_poll_failures,
                 )
@@ -544,7 +594,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
             # Escalate: persistent comm failures.
             raise UpdateFailed(
-                f"[{domains}] Error communicating with Daikin {self.name}: {err}"
+                f"[{domains}] Error communicating with Daikin {self.name}: {err_detail}"
             ) from err
 
         # Successful poll: reset cooldown and consecutive failure state.

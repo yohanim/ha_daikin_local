@@ -55,7 +55,7 @@ class DaikinDiagnosticSensorEntityDescription(SensorEntityDescription):
 
 @dataclass(frozen=True, kw_only=True)
 class DaikinDiagnosticDurationSensorEntityDescription(SensorEntityDescription):
-    """Diagnostics: last successful ``update_status`` duration per pydaikin domain (seconds)."""
+    """Diagnostics: last ``update_status`` attempt duration per pydaikin domain (seconds)."""
 
     value_from_coordinator: Callable[[DaikinCoordinator], float | None]
     requires_brp069_energy: bool = False
@@ -320,7 +320,7 @@ class DaikinDiagnosticSensor(DaikinEntity, SensorEntity):
 
 
 class DaikinDiagnosticDurationSensor(DaikinEntity, SensorEntity):
-    """Diagnostics: last poll duration per pydaikin domain (seconds)."""
+    """Diagnostics: last poll attempt duration per pydaikin domain (seconds, capped by timeout)."""
 
     entity_description: DaikinDiagnosticDurationSensorEntityDescription
 
@@ -342,5 +342,5 @@ class DaikinDiagnosticDurationSensor(DaikinEntity, SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        """Return last successful domain poll duration in seconds, or unknown before first poll."""
+        """Return last domain poll duration in seconds (includes failures), or None before first attempt."""
         return self.entity_description.value_from_coordinator(self.coordinator)
