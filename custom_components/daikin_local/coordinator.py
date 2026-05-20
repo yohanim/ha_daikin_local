@@ -9,6 +9,7 @@ import time
 
 from pydaikin.daikin_base import Appliance
 from pydaikin.daikin_brp069 import DaikinBRP069
+from pydaikin.exceptions import DaikinException
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfEnergy
 from homeassistant.core import HomeAssistant
@@ -30,13 +31,18 @@ from .const import (
     DOMAIN,
 )
 from .pure import (
+    brp069_poll_failure_log_domain,
     connection_timeout_sec,
     coordinator_poll_interval_sec,
     domain_poll_intervals_sec,
+    format_communication_error as _format_communication_error,
     history_auto_sync_deferred_by_grace,
     history_window_from_entry_and_overrides as _history_window_from_entry_and_overrides,
     lts_row_start_to_datetime_non_str,
+    poll_error_translation_error,
+    poll_failure_cooldown_seconds,
     recent_completed_hours_by_local_date as _recent_completed_hours_by_local_date_pure,
+    should_serve_cached_poll_data,
 )
 from .utils import calculate_energy_sum, parse_daikin_list
 
@@ -94,13 +100,17 @@ def _ensure_recorder_statistics_api() -> bool:
 _LOGGER = logging.getLogger(__name__)
 
 
-def _format_communication_error(err: Exception) -> str:
-    """Human-readable exception detail for logs (pydaikin / aiohttp often differ)."""
-    name = type(err).__name__
-    msg = str(err).strip()
-    if msg:
-        return f"{name}: {msg}"
-    return f"{name}: {err!r}"
+def _update_failed_for_poll_error(err: Exception) -> UpdateFailed:
+    """Translated UpdateFailed for persistent coordinator poll failures."""
+    return UpdateFailed(
+        translation_domain=DOMAIN,
+        translation_key="error_communicating",
+        translation_placeholders={
+            "error": poll_error_translation_error(
+                err, is_daikin_exception=isinstance(err, DaikinException)
+            )
+        },
+    )
 
 
 def _poll_duration_sec_since(start_mono: float, *, cap_sec: float) -> float:
@@ -542,60 +552,22 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                             poll_t0_mono, cap_sec=timeout_f
                         )
                         poll_t0_mono = None
+        except DaikinException as err:
+            return self._handle_poll_communication_error(
+                err,
+                now=now,
+                poll_t0_mono=poll_t0_mono,
+                timeout_f=timeout_f,
+                brp069_poll_domain=brp069_poll_domain,
+            )
         except Exception as err:
-            if poll_t0_mono is not None:
-                dur = _poll_duration_sec_since(poll_t0_mono, cap_sec=timeout_f)
-                if isinstance(self.device, DaikinBRP069):
-                    if brp069_poll_domain == "state":
-                        self._last_state_domain_response_sec = dur
-                    elif brp069_poll_domain == "energy":
-                        self._last_energy_domain_response_sec = dur
-                else:
-                    self._last_state_domain_response_sec = dur
-            self._ensure_error_stats_date()
-            self._daily_polling_error_count += 1
-            if isinstance(self.device, DaikinBRP069):
-                if brp069_poll_domain == "state":
-                    self._daily_state_poll_error_count += 1
-                elif brp069_poll_domain == "energy":
-                    self._daily_energy_poll_error_count += 1
-            self._schedule_persist_error_stats()
-            self._consecutive_poll_failures += 1
-            # No explicit retry is scheduled here: polling already runs frequently.
-
-            # For frequent polling, treat transient failures as "best effort":
-            # - during the first few consecutive failures, return cached data
-            #   and log at debug/info instead of raising UpdateFailed (which
-            #   triggers the noisy "Error fetching X data" log).
-            # - if failures persist, raise UpdateFailed to surface the issue.
-            cooldown_s = min(300, 30 * self._consecutive_poll_failures)
-            self._poll_cooldown_until = now + timedelta(seconds=cooldown_s)
-
-            err_detail = _format_communication_error(err)
-            if isinstance(self.device, DaikinBRP069) and brp069_poll_domain in (
-                "state",
-                "energy",
-            ):
-                domains = brp069_poll_domain
-            else:
-                domains = "state"
-
-            if self.data is not None and self._consecutive_poll_failures <= 3:
-                _LOGGER.warning(
-                    "[%s] Transient communication error for %s (%s); "
-                    "serving cached data, cooldown=%ss (failure #%s)",
-                    domains,
-                    self.name,
-                    err_detail,
-                    cooldown_s,
-                    self._consecutive_poll_failures,
-                )
-                return self.data
-
-            # Escalate: persistent comm failures.
-            raise UpdateFailed(
-                f"[{domains}] Error communicating with Daikin {self.name}: {err_detail}"
-            ) from err
+            return self._handle_poll_communication_error(
+                err,
+                now=now,
+                poll_t0_mono=poll_t0_mono,
+                timeout_f=timeout_f,
+                brp069_poll_domain=brp069_poll_domain,
+            )
 
         # Successful poll: reset cooldown and consecutive failure state.
         self._consecutive_poll_failures = 0
@@ -654,6 +626,67 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 self._auto_history_synced_ok = False
             await self._async_maybe_auto_history_sync(now_local)
         return data
+
+    def _handle_poll_communication_error(
+        self,
+        err: Exception,
+        *,
+        now: datetime,
+        poll_t0_mono: float | None,
+        timeout_f: float,
+        brp069_poll_domain: str | None,
+    ) -> DaikinData:
+        """Record poll failure; return cached data or raise translated UpdateFailed."""
+        if poll_t0_mono is not None:
+            dur = _poll_duration_sec_since(poll_t0_mono, cap_sec=timeout_f)
+            if isinstance(self.device, DaikinBRP069):
+                if brp069_poll_domain == "state":
+                    self._last_state_domain_response_sec = dur
+                elif brp069_poll_domain == "energy":
+                    self._last_energy_domain_response_sec = dur
+            else:
+                self._last_state_domain_response_sec = dur
+        self._ensure_error_stats_date()
+        self._daily_polling_error_count += 1
+        if isinstance(self.device, DaikinBRP069):
+            if brp069_poll_domain == "state":
+                self._daily_state_poll_error_count += 1
+            elif brp069_poll_domain == "energy":
+                self._daily_energy_poll_error_count += 1
+        self._schedule_persist_error_stats()
+        self._consecutive_poll_failures += 1
+        # No explicit retry is scheduled here: polling already runs frequently.
+
+        # For frequent polling, treat transient failures as "best effort":
+        # - during the first few consecutive failures, return cached data
+        #   and log at debug/info instead of raising UpdateFailed (which
+        #   triggers the noisy "Error fetching X data" log).
+        # - if failures persist, raise UpdateFailed to surface the issue.
+        cooldown_s = poll_failure_cooldown_seconds(self._consecutive_poll_failures)
+        self._poll_cooldown_until = now + timedelta(seconds=cooldown_s)
+
+        err_detail = _format_communication_error(err)
+        domains = brp069_poll_failure_log_domain(
+            is_brp069=isinstance(self.device, DaikinBRP069),
+            poll_domain=brp069_poll_domain,
+        )
+
+        if should_serve_cached_poll_data(
+            has_cached_data=self.data is not None,
+            consecutive_failures=self._consecutive_poll_failures,
+        ):
+            _LOGGER.warning(
+                "[%s] Transient communication error for %s (%s); "
+                "serving cached data, cooldown=%ss (failure #%s)",
+                domains,
+                self.name,
+                err_detail,
+                cooldown_s,
+                self._consecutive_poll_failures,
+            )
+            return self.data
+
+        raise _update_failed_for_poll_error(err) from err
 
     def _get_sum_from_daikin_key(self, daikin_key: str) -> float:
         """Calculate sum from a Daikin historical data key."""

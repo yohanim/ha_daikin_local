@@ -221,6 +221,9 @@
     }
   },
   "exceptions": {
+    "error_communicating": {
+      "message": "Erreur de communication avec l'appareil Daikin : {error}"
+    },
     "zone_hvac_mode_unsupported": {
       "message": "La température de zone ne peut être modifiée que lorsque le mode principal est chaud ou froid."
     },

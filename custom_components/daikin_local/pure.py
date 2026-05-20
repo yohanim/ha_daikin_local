@@ -153,6 +153,46 @@ def domain_poll_intervals_sec(entry_options: dict) -> tuple[int, int]:
     return state_s, energy_s
 
 
+def format_communication_error(err: Exception) -> str:
+    """Human-readable exception detail for logs (pydaikin / aiohttp often differ)."""
+    name = type(err).__name__
+    msg = str(err).strip()
+    if msg:
+        return f"{name}: {msg}"
+    return f"{name}: {err!r}"
+
+
+def poll_error_translation_error(err: Exception, *, is_daikin_exception: bool) -> str:
+    """Placeholder ``error`` for coordinator ``error_communicating`` translations."""
+    if is_daikin_exception:
+        return str(err)
+    return format_communication_error(err)
+
+
+def poll_failure_cooldown_seconds(consecutive_failures: int) -> int:
+    """Backoff seconds after a failed coordinator poll (capped at 300)."""
+    return min(300, 30 * consecutive_failures)
+
+
+def should_serve_cached_poll_data(
+    *,
+    has_cached_data: bool,
+    consecutive_failures: int,
+    max_transient_failures: int = 3,
+) -> bool:
+    """True when transient failures should return cached coordinator data."""
+    return has_cached_data and consecutive_failures <= max_transient_failures
+
+
+def brp069_poll_failure_log_domain(
+    *, is_brp069: bool, poll_domain: str | None
+) -> str:
+    """Log label for a failed BRP069 poll (``state`` or ``energy``)."""
+    if is_brp069 and poll_domain in ("state", "energy"):
+        return poll_domain
+    return "state"
+
+
 def build_service_schema(insert_missing_validator: Any) -> vol.Schema:
     """Build the service call schema; ``insert_missing_validator`` is ``cv.boolean`` in production."""
     return vol.Schema(
