@@ -162,7 +162,7 @@ def _domain_poll_intervals_sec(entry: ConfigEntry) -> tuple[int, int]:
     return domain_poll_intervals_sec(entry.options)
 
 
-@dataclass
+@dataclass(frozen=True)
 class DaikinData:
     """Snapshot of appliance-derived state after each successful coordinator refresh."""
 
@@ -226,6 +226,12 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         self._history_sync_lock = asyncio.Lock()
         # Serialize all pydaikin HTTP traffic (polls and device.set* from entities).
         self._pydaikin_communication_lock = asyncio.Lock()
+        # Cached Store instance for daily poll error stats persistence.
+        self._error_stats_store = Store(
+            hass,
+            ERROR_STATS_STORAGE_VERSION,
+            ERROR_STATS_STORAGE_KEY,
+        )
         # Last update_status duration per BRP069 domain (seconds); None until first attempt.
         self._last_state_domain_response_sec: float | None = None
         self._last_energy_domain_response_sec: float | None = None
@@ -259,12 +265,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
     async def async_load_error_stats(self) -> None:
         """Restore daily poll error counts from storage (same local calendar day)."""
-        store = Store(
-            self.hass,
-            ERROR_STATS_STORAGE_VERSION,
-            ERROR_STATS_STORAGE_KEY,
-        )
-        raw = await store.async_load()
+        raw = await self._error_stats_store.async_load()
         if not raw:
             return
         row = raw.get(self.config_entry.entry_id)
@@ -285,7 +286,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             self._daily_polling_error_count = 0
             self._daily_state_poll_error_count = 0
             self._daily_energy_poll_error_count = 0
-            await self._async_persist_error_stats()
+            await self._async_persist_error_stats()  # synchronous here: we're in setup
             return
         self._error_stats_date = today
         self._daily_polling_error_count = int(row.get("polling_errors", 0))
@@ -294,15 +295,14 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
     def _schedule_persist_error_stats(self) -> None:
         """Save daily poll error count (survives HA restart for the same local day)."""
-        self.hass.async_create_task(self._async_persist_error_stats())
+        self.config_entry.async_create_background_task(
+            self.hass,
+            self._async_persist_error_stats(),
+            "daikin-persist-error-stats",
+        )
 
     async def _async_persist_error_stats(self) -> None:
-        store = Store(
-            self.hass,
-            ERROR_STATS_STORAGE_VERSION,
-            ERROR_STATS_STORAGE_KEY,
-        )
-        raw = await store.async_load()
+        raw = await self._error_stats_store.async_load()
         if raw is None:
             raw = {}
         today = dt_util.as_local(dt_util.utcnow()).date().isoformat()
@@ -312,7 +312,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             "state_poll_errors": self._daily_state_poll_error_count,
             "energy_poll_errors": self._daily_energy_poll_error_count,
         }
-        await store.async_save(raw)
+        await self._error_stats_store.async_save(raw)
 
     @property
     def daily_polling_error_count(self) -> int:

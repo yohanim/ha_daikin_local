@@ -13,6 +13,7 @@ from pydaikin.factory import DaikinFactory
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.typing import ConfigType
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -33,6 +34,13 @@ from .coordinator import DaikinConfigEntry, DaikinCoordinator
 from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up domain-level services (called once regardless of entry count)."""
+    await async_setup_services(hass)
+    return True
+
 
 # v1.1.0 diagnostics used these keys; v1.1.1+ uses pydaikin_daily_poll_errors.
 _LEGACY_DIAGNOSTIC_SENSOR_KEYS: tuple[tuple[str, str], ...] = (
@@ -143,7 +151,11 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         return True
 
-    return True
+    _LOGGER.error(
+        "Cannot migrate config entry from version %s: unknown version (downgrade?)",
+        entry.version,
+    )
+    return False
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bool:
@@ -202,14 +214,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bo
 
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
-    # Register services once
-    if not hass.data.get(f"{DOMAIN}_services_registered"):
-        await async_setup_services(hass)
-        hass.data[f"{DOMAIN}_services_registered"] = True
-
     entry.async_on_unload(entry.add_update_listener(update_listener))
-
     return True
 
 

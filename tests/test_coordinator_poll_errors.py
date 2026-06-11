@@ -1,9 +1,16 @@
-"""Unit tests for coordinator poll error handling (no full Home Assistant)."""
+"""Unit tests for coordinator internals (no full Home Assistant).
+
+Covers: poll error handling, DaikinData immutability, Store caching,
+background-task delegation for error-stats persistence.
+"""
 
 from __future__ import annotations
 
+import asyncio
+import dataclasses
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -312,3 +319,135 @@ def test_handle_poll_error_brp069_records_energy_response_time() -> None:
 
     assert coordinator._last_energy_domain_response_sec == 5.0
     assert coordinator._last_state_domain_response_sec is None
+
+
+# ---------------------------------------------------------------------------
+# DaikinData frozen=True
+# ---------------------------------------------------------------------------
+
+
+def _make_data(mod):
+    device = Appliance.__new__(Appliance)
+    return mod.DaikinData(
+        appliance=device,
+        calculated_total_energy_today=1.0,
+        today_energy=1.0,
+        today_cool_energy=0.6,
+        today_heat_energy=0.4,
+    )
+
+
+def test_daikin_data_fields_readable() -> None:
+    mod = load_coordinator_module()
+    data = _make_data(mod)
+    assert data.calculated_total_energy_today == 1.0
+    assert data.today_cool_energy == 0.6
+
+
+def test_daikin_data_is_frozen() -> None:
+    """frozen=True must prevent accidental mutation of coordinator snapshot."""
+    mod = load_coordinator_module()
+    assert mod.DaikinData.__dataclass_params__.frozen is True
+
+
+def test_daikin_data_field_reassignment_raises() -> None:
+    mod = load_coordinator_module()
+    data = _make_data(mod)
+    with pytest.raises((AttributeError, TypeError, dataclasses.FrozenInstanceError)):
+        data.calculated_total_energy_today = 99.0  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# Store caching: _error_stats_store must be reused, not re-created per call
+# ---------------------------------------------------------------------------
+
+
+def _coordinator_with_store(mod):
+    coordinator = object.__new__(mod.DaikinCoordinator)
+    coordinator._error_stats_store = MagicMock()
+    return coordinator
+
+
+def test_async_load_uses_cached_store() -> None:
+    mod = load_coordinator_module()
+    coordinator = _coordinator_with_store(mod)
+    coordinator._error_stats_store.async_load = AsyncMock(return_value=None)
+
+    asyncio.run(coordinator.async_load_error_stats())
+
+    coordinator._error_stats_store.async_load.assert_called_once()
+
+
+def test_async_persist_uses_cached_store() -> None:
+    mod = load_coordinator_module()
+    coordinator = _coordinator_with_store(mod)
+    coordinator.config_entry = SimpleNamespace(entry_id="test-entry")
+    coordinator._daily_polling_error_count = 2
+    coordinator._daily_state_poll_error_count = 1
+    coordinator._daily_energy_poll_error_count = 0
+    coordinator._error_stats_store.async_load = AsyncMock(return_value={})
+    coordinator._error_stats_store.async_save = AsyncMock()
+
+    asyncio.run(coordinator._async_persist_error_stats())
+
+    coordinator._error_stats_store.async_load.assert_called_once()
+    coordinator._error_stats_store.async_save.assert_called_once()
+    saved = coordinator._error_stats_store.async_save.call_args[0][0]
+    assert saved["test-entry"]["polling_errors"] == 2
+
+
+def test_second_persist_reuses_same_store_instance() -> None:
+    mod = load_coordinator_module()
+    coordinator = _coordinator_with_store(mod)
+    coordinator.config_entry = SimpleNamespace(entry_id="test-entry")
+    coordinator._daily_polling_error_count = 0
+    coordinator._daily_state_poll_error_count = 0
+    coordinator._daily_energy_poll_error_count = 0
+    coordinator._error_stats_store.async_load = AsyncMock(return_value={})
+    coordinator._error_stats_store.async_save = AsyncMock()
+
+    asyncio.run(coordinator._async_persist_error_stats())
+    asyncio.run(coordinator._async_persist_error_stats())
+
+    assert coordinator._error_stats_store.async_save.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# _schedule_persist_error_stats → config_entry.async_create_background_task
+# ---------------------------------------------------------------------------
+
+
+def test_schedule_persist_calls_background_task() -> None:
+    mod = load_coordinator_module()
+    coordinator = object.__new__(mod.DaikinCoordinator)
+    coordinator._error_stats_store = MagicMock()
+
+    created: list[str] = []
+
+    def _fake_bg_task(_hass, coro, name):
+        created.append(name)
+        if hasattr(coro, "close"):
+            coro.close()
+
+    coordinator.hass = MagicMock()
+    coordinator.config_entry = SimpleNamespace(async_create_background_task=_fake_bg_task)
+
+    coordinator._schedule_persist_error_stats()
+
+    assert len(created) == 1
+    assert "persist" in created[0].lower() or "error" in created[0].lower()
+
+
+def test_schedule_persist_does_not_use_hass_async_create_task() -> None:
+    mod = load_coordinator_module()
+    coordinator = object.__new__(mod.DaikinCoordinator)
+    coordinator._error_stats_store = MagicMock()
+    hass_mock = MagicMock()
+    coordinator.hass = hass_mock
+    coordinator.config_entry = SimpleNamespace(
+        async_create_background_task=lambda _hass, coro, name: coro.close()
+    )
+
+    coordinator._schedule_persist_error_stats()
+
+    hass_mock.async_create_task.assert_not_called()

@@ -146,6 +146,172 @@ def install_ha_stubs_for_coordinator() -> None:
     er_mod.async_get = lambda _hass: None
 
 
+def install_extra_stubs_for_init() -> None:
+    """Extend coordinator stubs with everything __init__.py additionally needs.
+
+    Must be called *after* install_ha_stubs_for_coordinator().
+    """
+    # ---- aiohttp ----
+    if "aiohttp" not in sys.modules:
+        aio = types.ModuleType("aiohttp")
+
+        class ClientConnectionError(OSError):
+            pass
+
+        aio.ClientConnectionError = ClientConnectionError
+        sys.modules["aiohttp"] = aio
+
+    # ---- pydaikin.factory ----
+    if "pydaikin.factory" not in sys.modules:
+        factory_mod = types.ModuleType("pydaikin.factory")
+
+        async def DaikinFactory(host: str, session: Any) -> Any:  # noqa: N802
+            return None
+
+        factory_mod.DaikinFactory = DaikinFactory
+        sys.modules["pydaikin.factory"] = factory_mod
+
+    # ---- homeassistant.const extras ----
+    const_mod = sys.modules.get("homeassistant.const")
+    if const_mod is not None:
+        if not hasattr(const_mod, "CONF_HOST"):
+            const_mod.CONF_HOST = "host"
+        if not hasattr(const_mod, "Platform"):
+
+            class _Platform:
+                CLIMATE = "climate"
+                SENSOR = "sensor"
+                SWITCH = "switch"
+
+            const_mod.Platform = _Platform
+
+    # ---- homeassistant.core extras ----
+    core_mod = sys.modules.get("homeassistant.core")
+    if core_mod is not None and not hasattr(core_mod, "callback"):
+        core_mod.callback = lambda f: f
+
+    # ---- homeassistant.helpers.typing ----
+    if "homeassistant.helpers.typing" not in sys.modules:
+        typing_mod = types.ModuleType("homeassistant.helpers.typing")
+        typing_mod.ConfigType = dict
+        sys.modules["homeassistant.helpers.typing"] = typing_mod
+
+    # ---- homeassistant.exceptions ----
+    if "homeassistant.exceptions" not in sys.modules:
+        exc_mod = types.ModuleType("homeassistant.exceptions")
+
+        class ConfigEntryNotReady(Exception):
+            pass
+
+        class HomeAssistantError(Exception):
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                super().__init__(*args)
+                self.translation_domain = kwargs.get("translation_domain")
+                self.translation_key = kwargs.get("translation_key")
+                self.translation_placeholders = kwargs.get("translation_placeholders", {})
+
+        class ServiceValidationError(HomeAssistantError):
+            pass
+
+        exc_mod.ConfigEntryNotReady = ConfigEntryNotReady
+        exc_mod.HomeAssistantError = HomeAssistantError
+        exc_mod.ServiceValidationError = ServiceValidationError
+        sys.modules["homeassistant.exceptions"] = exc_mod
+
+    # ---- homeassistant.helpers.aiohttp_client ----
+    if "homeassistant.helpers.aiohttp_client" not in sys.modules:
+        client_mod = types.ModuleType("homeassistant.helpers.aiohttp_client")
+        client_mod.async_get_clientsession = lambda _hass: None
+        sys.modules["homeassistant.helpers.aiohttp_client"] = client_mod
+
+    # ---- homeassistant.helpers.device_registry ----
+    dr_key = "homeassistant.helpers.device_registry"
+    if dr_key not in sys.modules:
+        dr_mod = types.ModuleType(dr_key)
+        sys.modules[dr_key] = dr_mod
+    dr_mod = sys.modules[dr_key]
+    for _attr, _val in (
+        ("async_get", lambda _hass: None),
+        ("format_mac", lambda mac: mac.lower()),
+        ("CONNECTION_NETWORK_MAC", "mac"),
+        ("async_entries_for_config_entry", lambda _reg, _eid: []),
+    ):
+        if not hasattr(dr_mod, _attr):
+            setattr(dr_mod, _attr, _val)
+
+    # ---- homeassistant.helpers.entity_registry extras ----
+    er_mod = sys.modules.get("homeassistant.helpers.entity_registry")
+    if er_mod is not None:
+        if not hasattr(er_mod, "async_entries_for_config_entry"):
+            er_mod.async_entries_for_config_entry = lambda _reg, _eid: []
+        if not hasattr(er_mod, "async_migrate_entries"):
+
+            async def _noop_migrate(*_args: Any, **_kwargs: Any) -> None:
+                pass
+
+            er_mod.async_migrate_entries = _noop_migrate
+        if not hasattr(er_mod, "async_entries_for_device"):
+            er_mod.async_entries_for_device = (
+                lambda _reg, _did, _include_disabled=False: []
+            )
+        if not hasattr(er_mod, "RegistryEntry"):
+
+            class RegistryEntry:
+                unique_id: str = ""
+                entity_id: str = ""
+                domain: str = ""
+                platform: str = ""
+                config_entry_id: str | None = None
+                disabled_by: Any = None
+
+            er_mod.RegistryEntry = RegistryEntry
+
+    # ---- homeassistant.config_entries extras ----
+    ce_mod = sys.modules.get("homeassistant.config_entries")
+    if ce_mod is not None:
+        for _name in ("ConfigFlow", "OptionsFlow", "ConfigFlowResult"):
+            if not hasattr(ce_mod, _name):
+                setattr(ce_mod, _name, type(_name, (), {}))
+        if not hasattr(ce_mod, "callback"):
+            ce_mod.callback = lambda f: f
+
+    # ---- .services stub ----
+    services_key = f"{_PKG}.services"
+    if services_key not in sys.modules:
+        services_mod = types.ModuleType(services_key)
+
+        async def async_setup_services(_hass: Any) -> None:
+            pass
+
+        services_mod.async_setup_services = async_setup_services
+        sys.modules[services_key] = services_mod
+
+
+def load_init_module() -> types.ModuleType:
+    """Import ``custom_components.daikin_local.__init__`` with HA stubs (idempotent)."""
+    cached = sys.modules.get(_PKG)
+    if cached is not None and hasattr(cached, "async_migrate_entry"):
+        return cached
+    if _PKG in sys.modules:
+        del sys.modules[_PKG]
+
+    ensure_daikin_pure_and_const_loaded()
+    install_pydaikin_stubs()
+    install_ha_stubs_for_coordinator()
+    install_extra_stubs_for_init()
+    load_coordinator_module()  # __init__ imports DaikinCoordinator from coordinator
+
+    init_path = _REPO / "custom_components/daikin_local/__init__.py"
+    spec = importlib.util.spec_from_file_location(_PKG, init_path)
+    if not spec or not spec.loader:
+        msg = f"Cannot load {init_path}"
+        raise RuntimeError(msg)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[_PKG] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def load_coordinator_module():
     """Import ``custom_components.daikin_local.coordinator`` with HA stubs (idempotent)."""
     cached = sys.modules.get(_COORDINATOR_KEY)
