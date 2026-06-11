@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -55,36 +54,36 @@ def _hass() -> SimpleNamespace:
 # ---------------------------------------------------------------------------
 
 
-def test_unknown_version_returns_false() -> None:
+async def test_unknown_version_returns_false() -> None:
     mod = load_init_module()
-    result = asyncio.run(mod.async_migrate_entry(_hass(), _entry(version=99)))
+    result = await mod.async_migrate_entry(_hass(), _entry(version=99))
     assert result is False
 
 
-def test_unknown_version_does_not_mutate_entry() -> None:
+async def test_unknown_version_does_not_mutate_entry() -> None:
     mod = load_init_module()
     hass = _hass()
-    asyncio.run(mod.async_migrate_entry(hass, _entry(version=99, data={"key": "v"})))
+    await mod.async_migrate_entry(hass, _entry(version=99, data={"key": "v"}))
     assert hass._applied == []
 
 
 @pytest.mark.parametrize("version", [1, 2, 3, 4, 5])
-def test_known_version_returns_true(version: int) -> None:
+async def test_known_version_returns_true(version: int) -> None:
     mod = load_init_module()
     entry = _entry(
         version=version,
         data={"api_key": "x", "timeout": 30, "host": "h"},
         options={"history_skip_hours": 2, "history_sync_minutes_after_hour": 5, "timeout": 30},
     )
-    result = asyncio.run(mod.async_migrate_entry(_hass(), entry))
+    result = await mod.async_migrate_entry(_hass(), entry)
     assert result is True
 
 
-def test_v1_drops_credential_keys() -> None:
+async def test_v1_drops_credential_keys() -> None:
     mod = load_init_module()
     hass = _hass()
     entry = _entry(version=1, data={"api_key": "s", "password": "p", "uuid": "u", "host": "h"})
-    asyncio.run(mod.async_migrate_entry(hass, entry))
+    await mod.async_migrate_entry(hass, entry)
     new_data = hass._applied[0]["data"]
     assert "api_key" not in new_data
     assert "password" not in new_data
@@ -92,28 +91,28 @@ def test_v1_drops_credential_keys() -> None:
     assert "host" in new_data
 
 
-def test_v2_renames_skip_hours() -> None:
+async def test_v2_renames_skip_hours() -> None:
     mod = load_init_module()
     hass = _hass()
     entry = _entry(version=2, options={"history_skip_hours": 3})
-    asyncio.run(mod.async_migrate_entry(hass, entry))
+    await mod.async_migrate_entry(hass, entry)
     new_opts = hass._applied[0]["options"]
     assert "history_skip_hours" not in new_opts
     assert new_opts["history_skip_extra_hours"] == 2  # max(0, 3-1)
 
 
-def test_v4_splits_timeout_into_connection_and_poll() -> None:
+async def test_v4_splits_timeout_into_connection_and_poll() -> None:
     mod = load_init_module()
     hass = _hass()
     entry = _entry(version=4, data={"timeout": 45, "host": "h"}, options={})
-    asyncio.run(mod.async_migrate_entry(hass, entry))
+    await mod.async_migrate_entry(hass, entry)
     new_data = hass._applied[0]["data"]
     assert new_data["connection_timeout"] == 45
     assert new_data["poll_interval_sec"] == 45
     assert "timeout" not in new_data
 
 
-def test_v5_drops_onecta_keys() -> None:
+async def test_v5_drops_onecta_keys() -> None:
     mod = load_init_module()
     hass = _hass()
     entry = _entry(
@@ -121,7 +120,7 @@ def test_v5_drops_onecta_keys() -> None:
         data={"host": "h", "onecta_cloud_fan_enabled": True, "onecta_client_id": "cid"},
         options={"onecta_refresh_token": "tok"},
     )
-    asyncio.run(mod.async_migrate_entry(hass, entry))
+    await mod.async_migrate_entry(hass, entry)
     assert "onecta_cloud_fan_enabled" not in hass._applied[0]["data"]
     assert "onecta_refresh_token" not in hass._applied[0]["options"]
     assert "host" in hass._applied[0]["data"]
@@ -132,7 +131,7 @@ def test_v5_drops_onecta_keys() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_async_setup_returns_true_and_calls_setup_services() -> None:
+async def test_async_setup_returns_true_and_calls_setup_services() -> None:
     mod = load_init_module()
     calls: list[int] = []
 
@@ -140,7 +139,7 @@ def test_async_setup_returns_true_and_calls_setup_services() -> None:
         calls.append(1)
 
     with patch.object(mod, "async_setup_services", side_effect=_fake):
-        result = asyncio.run(mod.async_setup(MagicMock(), {}))
+        result = await mod.async_setup(MagicMock(), {})
 
     assert result is True
     assert calls == [1]

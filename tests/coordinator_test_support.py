@@ -196,6 +196,13 @@ def install_extra_stubs_for_init() -> None:
         typing_mod.ConfigType = dict
         sys.modules["homeassistant.helpers.typing"] = typing_mod
 
+    # ---- homeassistant.helpers.config_validation ----
+    cv_key = "homeassistant.helpers.config_validation"
+    if cv_key not in sys.modules:
+        cv_mod = types.ModuleType(cv_key)
+        cv_mod.empty_config_schema = lambda _domain: lambda _config: {}
+        sys.modules[cv_key] = cv_mod
+
     # ---- homeassistant.exceptions ----
     if "homeassistant.exceptions" not in sys.modules:
         exc_mod = types.ModuleType("homeassistant.exceptions")

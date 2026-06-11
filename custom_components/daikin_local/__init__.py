@@ -10,6 +10,7 @@ from pydaikin.daikin_base import Appliance
 from pydaikin.daikin_brp069 import DaikinBRP069
 from pydaikin.factory import DaikinFactory
 
+import homeassistant.helpers.config_validation as cv
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import HomeAssistant, callback
@@ -34,6 +35,10 @@ from .coordinator import DaikinConfigEntry, DaikinCoordinator
 from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
+
+# No YAML configuration — empty schema signals to hassfest that async_setup
+# is used only for service registration, not for YAML config support.
+CONFIG_SCHEMA = cv.empty_config_schema(DOMAIN)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:

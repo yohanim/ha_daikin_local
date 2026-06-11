@@ -21,9 +21,14 @@ def ensure_daikin_pure_and_const_loaded() -> None:
         cc.__path__ = [str(_REPO / "custom_components")]
         sys.modules["custom_components"] = cc
 
-    parent = types.ModuleType(_PKG)
-    parent.__path__ = [str(_REPO / "custom_components" / "daikin_local")]
-    sys.modules[_PKG] = parent
+    # Only inject a stub parent if one is not already in sys.modules.
+    # When the real homeassistant package is installed, PHCC may have already
+    # imported ``custom_components.daikin_local``; overwriting it would break
+    # the ``requires_ha`` test fixtures.
+    if _PKG not in sys.modules:
+        parent = types.ModuleType(_PKG)
+        parent.__path__ = [str(_REPO / "custom_components" / "daikin_local")]
+        sys.modules[_PKG] = parent
 
     c_path = _REPO / "custom_components/daikin_local/const.py"
     spec_c = importlib.util.spec_from_file_location(f"{_PKG}.const", c_path)

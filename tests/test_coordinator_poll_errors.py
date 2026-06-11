@@ -6,7 +6,6 @@ background-task delegation for error-stats persistence.
 
 from __future__ import annotations
 
-import asyncio
 import dataclasses
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -368,17 +367,17 @@ def _coordinator_with_store(mod):
     return coordinator
 
 
-def test_async_load_uses_cached_store() -> None:
+async def test_async_load_uses_cached_store() -> None:
     mod = load_coordinator_module()
     coordinator = _coordinator_with_store(mod)
     coordinator._error_stats_store.async_load = AsyncMock(return_value=None)
 
-    asyncio.run(coordinator.async_load_error_stats())
+    await coordinator.async_load_error_stats()
 
     coordinator._error_stats_store.async_load.assert_called_once()
 
 
-def test_async_persist_uses_cached_store() -> None:
+async def test_async_persist_uses_cached_store() -> None:
     mod = load_coordinator_module()
     coordinator = _coordinator_with_store(mod)
     coordinator.config_entry = SimpleNamespace(entry_id="test-entry")
@@ -388,7 +387,7 @@ def test_async_persist_uses_cached_store() -> None:
     coordinator._error_stats_store.async_load = AsyncMock(return_value={})
     coordinator._error_stats_store.async_save = AsyncMock()
 
-    asyncio.run(coordinator._async_persist_error_stats())
+    await coordinator._async_persist_error_stats()
 
     coordinator._error_stats_store.async_load.assert_called_once()
     coordinator._error_stats_store.async_save.assert_called_once()
@@ -396,7 +395,7 @@ def test_async_persist_uses_cached_store() -> None:
     assert saved["test-entry"]["polling_errors"] == 2
 
 
-def test_second_persist_reuses_same_store_instance() -> None:
+async def test_second_persist_reuses_same_store_instance() -> None:
     mod = load_coordinator_module()
     coordinator = _coordinator_with_store(mod)
     coordinator.config_entry = SimpleNamespace(entry_id="test-entry")
@@ -406,8 +405,8 @@ def test_second_persist_reuses_same_store_instance() -> None:
     coordinator._error_stats_store.async_load = AsyncMock(return_value={})
     coordinator._error_stats_store.async_save = AsyncMock()
 
-    asyncio.run(coordinator._async_persist_error_stats())
-    asyncio.run(coordinator._async_persist_error_stats())
+    await coordinator._async_persist_error_stats()
+    await coordinator._async_persist_error_stats()
 
     assert coordinator._error_stats_store.async_save.call_count == 2
 
