@@ -35,6 +35,7 @@ from custom_components.daikin_local.pure import (  # noqa: E402
     history_skip_hours_from_options,
     history_window_from_entry_and_overrides,
     lts_row_start_to_datetime_non_str,
+    main_climate_temperature_limits,
     recent_completed_hours_by_local_date,
 )
 
@@ -219,3 +220,20 @@ def test_service_schema_rejects_invalid_days_ago() -> None:
     schema = build_service_schema(vol.Coerce(bool))
     with pytest.raises(vol.Invalid):
         schema({ATTR_DAYS_AGO: 2})
+
+
+@pytest.mark.parametrize(
+    ("hvac_mode", "expected_min", "expected_max"),
+    [
+        ("cool", 18.0, 32.0),
+        ("heat", 10.0, 30.0),
+        ("heat_cool", 16.0, 32.0),
+        ("dry", 16.0, 32.0),
+        ("fan_only", 16.0, 32.0),
+        ("off", 16.0, 32.0),
+    ],
+)
+def test_main_climate_temperature_limits(
+    hvac_mode: str, expected_min: float, expected_max: float
+) -> None:
+    assert main_climate_temperature_limits(hvac_mode) == (expected_min, expected_max)

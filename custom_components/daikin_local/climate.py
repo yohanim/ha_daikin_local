@@ -38,6 +38,7 @@ from .const import (
 )
 from .coordinator import DaikinConfigEntry, DaikinCoordinator
 from .entity import DaikinEntity
+from .pure import main_climate_temperature_limits
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -270,6 +271,18 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
     def target_temperature(self) -> float | None:
         """Return the temperature we try to reach."""
         return self.device.target_temperature
+
+    @property
+    def min_temp(self) -> float:
+        """Return the minimum selectable temperature for the current HVAC mode."""
+        min_t, _ = main_climate_temperature_limits(self.hvac_mode)
+        return min_t
+
+    @property
+    def max_temp(self) -> float:
+        """Return the maximum selectable temperature for the current HVAC mode."""
+        _, max_t = main_climate_temperature_limits(self.hvac_mode)
+        return max_t
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set new target temperature."""

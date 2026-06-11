@@ -193,6 +193,21 @@ def brp069_poll_failure_log_domain(
     return "state"
 
 
+def main_climate_temperature_limits(hvac_mode: str) -> tuple[float, float]:
+    """Return ``(min_temp, max_temp)`` for the main climate entity by HVAC mode.
+
+    Aligns with Home Assistant core Daikin (#172123): Daikin head units reject
+    out-of-range setpoints silently; exposing realistic limits avoids confusing UI
+    and broken automations that rely on ``min_temp`` / ``max_temp`` attributes.
+    """
+    if hvac_mode == "cool":
+        return 18.0, 32.0
+    if hvac_mode == "heat":
+        # 10 °C supports Daikin Leave Home anti-freeze setpoints.
+        return 10.0, 30.0
+    return 16.0, 32.0
+
+
 def build_service_schema(insert_missing_validator: Any) -> vol.Schema:
     """Build the service call schema; ``insert_missing_validator`` is ``cv.boolean`` in production."""
     return vol.Schema(
