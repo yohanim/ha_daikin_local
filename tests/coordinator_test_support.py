@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 import types
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from tests.daikin_pure_loader import _PKG, _REPO, ensure_daikin_pure_and_const_loaded
@@ -131,7 +131,7 @@ def install_ha_stubs_for_coordinator() -> None:
     const_mod.UnitOfEnergy = type("UnitOfEnergy", (), {"KILO_WATT_HOUR": "kWh"})
 
     dt_mod = sys.modules["homeassistant.util.dt"]
-    dt_mod.utcnow = lambda: datetime.now(timezone.utc)
+    dt_mod.utcnow = lambda: datetime.now(UTC)
     dt_mod.as_local = lambda value: value
 
     storage_mod = sys.modules["homeassistant.helpers.storage"]
@@ -165,7 +165,7 @@ def install_extra_stubs_for_init() -> None:
     if "pydaikin.factory" not in sys.modules:
         factory_mod = types.ModuleType("pydaikin.factory")
 
-        async def DaikinFactory(host: str, session: Any) -> Any:  # noqa: N802
+        async def DaikinFactory(host: str, session: Any) -> Any:
             return None
 
         factory_mod.DaikinFactory = DaikinFactory

@@ -5,20 +5,20 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from aiohttp import ClientConnectionError
-from pydaikin.daikin_base import Appliance
-from pydaikin.daikin_brp069 import DaikinBRP069
-from pydaikin.factory import DaikinFactory
-
 import homeassistant.helpers.config_validation as cv
+from aiohttp import ClientConnectionError
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.typing import ConfigType
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
+from homeassistant.helpers.typing import ConfigType
+from pydaikin.daikin_base import Appliance
+from pydaikin.daikin_brp069 import DaikinBRP069
+from pydaikin.factory import DaikinFactory
 
 from .const import (
     CONF_CONNECTION_TIMEOUT,
@@ -316,26 +316,25 @@ async def async_migrate_unique_id(
     )
 
     # Remove duplicated device
-    if duplicate is not None:
-        if config_entry.entry_id in duplicate.config_entries:
-            _LOGGER.debug(
-                "Removing duplicated device %s",
-                duplicate.name,
-            )
+    if duplicate is not None and config_entry.entry_id in duplicate.config_entries:
+        _LOGGER.debug(
+            "Removing duplicated device %s",
+            duplicate.name,
+        )
 
-            # The automatic cleanup in entity registry is scheduled as a task, remove
-            # the entities manually to avoid unique_id collision when the entities
-            # are migrated.
-            duplicate_entities = er.async_entries_for_device(
-                ent_reg, duplicate.id, True
-            )
-            for entity in duplicate_entities:
-                if entity.config_entry_id == config_entry.entry_id:
-                    ent_reg.async_remove(entity.entity_id)
+        # The automatic cleanup in entity registry is scheduled as a task, remove
+        # the entities manually to avoid unique_id collision when the entities
+        # are migrated.
+        duplicate_entities = er.async_entries_for_device(
+            ent_reg, duplicate.id, True
+        )
+        for entity in duplicate_entities:
+            if entity.config_entry_id == config_entry.entry_id:
+                ent_reg.async_remove(entity.entity_id)
 
-            dev_reg.async_update_device(
-                duplicate.id, remove_config_entry_id=config_entry.entry_id
-            )
+        dev_reg.async_update_device(
+            duplicate.id, remove_config_entry_id=config_entry.entry_id
+        )
 
     # Migrate devices
     for device_entry in dr.async_entries_for_config_entry(

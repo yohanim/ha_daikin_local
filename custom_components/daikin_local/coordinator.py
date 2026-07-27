@@ -1,23 +1,23 @@
 """Coordinator for Daikin integration."""
 
 import asyncio
-from dataclasses import dataclass
-from datetime import date, datetime, timedelta
 import logging
 import re
 import time
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
 
-from pydaikin.daikin_base import Appliance
-from pydaikin.daikin_brp069 import DaikinBRP069
-from pydaikin.exceptions import DaikinException
+from homeassistant.components import recorder
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfEnergy
 from homeassistant.core import HomeAssistant
-from homeassistant.components import recorder
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
+from pydaikin.daikin_base import Appliance
+from pydaikin.daikin_brp069 import DaikinBRP069
+from pydaikin.exceptions import DaikinException
 
 from .const import (
     ATTR_COOL_ENERGY,
@@ -35,14 +35,20 @@ from .pure import (
     connection_timeout_sec,
     coordinator_poll_interval_sec,
     domain_poll_intervals_sec,
-    format_communication_error as _format_communication_error,
     history_auto_sync_deferred_by_grace,
-    history_window_from_entry_and_overrides as _history_window_from_entry_and_overrides,
     lts_row_start_to_datetime_non_str,
     poll_error_translation_error,
     poll_failure_cooldown_seconds,
-    recent_completed_hours_by_local_date as _recent_completed_hours_by_local_date_pure,
     should_serve_cached_poll_data,
+)
+from .pure import (
+    format_communication_error as _format_communication_error,
+)
+from .pure import (
+    history_window_from_entry_and_overrides as _history_window_from_entry_and_overrides,
+)
+from .pure import (
+    recent_completed_hours_by_local_date as _recent_completed_hours_by_local_date_pure,
 )
 from .utils import calculate_energy_sum, parse_daikin_list
 
@@ -77,15 +83,22 @@ def _ensure_recorder_statistics_api() -> bool:
     try:
         from homeassistant.components.recorder.models import (
             StatisticData as _StatisticData,
+        )
+
+        # In recent Home Assistant versions, StatisticMeanType is defined in
+        # recorder models (not in recorder.const).
+        from homeassistant.components.recorder.models import (
+            StatisticMeanType as _StatisticMeanType,
+        )
+        from homeassistant.components.recorder.models import (
             StatisticMetaData as _StatisticMetaData,
         )
         from homeassistant.components.recorder.statistics import (
             async_import_statistics as _async_import_statistics,
+        )
+        from homeassistant.components.recorder.statistics import (
             statistics_during_period as _statistics_during_period,
         )
-        # In recent Home Assistant versions, StatisticMeanType is defined in
-        # recorder models (not in recorder.const).
-        from homeassistant.components.recorder.models import StatisticMeanType as _StatisticMeanType
     except ImportError as err:
         _LOGGER.debug("Recorder statistics API import failed: %s", err)
         return False
@@ -139,7 +152,7 @@ def _recent_completed_hours_by_local_date(
 
 
 def _lts_row_start_to_datetime(
-    start: datetime | str | float | int | None,
+    start: datetime | str | float | None,
 ) -> datetime | None:
     """Convert recorder LTS row ``start`` to a datetime."""
     if isinstance(start, str):
@@ -411,7 +424,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 days_ago=0,
                 insert_missing=None,
             )
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             # Widen next run's window to backfill one extra hour.
             self._history_backfill_extra_hour = True
             _LOGGER.warning(
@@ -438,14 +451,13 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
 
         # If we've recently hit a transient communication error, avoid hammering
         # the device (and spamming logs). Return cached data during cooldown.
-        if self._poll_cooldown_until is not None and now < self._poll_cooldown_until:
-            if self.data is not None:
-                _LOGGER.debug(
-                    "[coordinator] Skipping update for %s during cooldown until %s",
-                    self.name,
-                    self._poll_cooldown_until,
-                )
-                return self.data
+        if self._poll_cooldown_until is not None and now < self._poll_cooldown_until and self.data is not None:
+            _LOGGER.debug(
+                "[coordinator] Skipping update for %s during cooldown until %s",
+                self.name,
+                self._poll_cooldown_until,
+            )
+            return self.data
 
         brp069_energy_attempted = False
         # Which BRP069 ``update_status`` call was in flight when an error occurred
@@ -560,7 +572,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 timeout_f=timeout_f,
                 brp069_poll_domain=brp069_poll_domain,
             )
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             return self._handle_poll_communication_error(
                 err,
                 now=now,
@@ -1303,7 +1315,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 {"energy": UnitOfEnergy.KILO_WATT_HOUR},
                 {"sum"},
             )
-            if entity_id in last_stats and last_stats[entity_id]:
+            if last_stats.get(entity_id):
                 last_sum = last_stats[entity_id][-1].get("sum") or 0.0
 
         metadata: StatisticMetaData = {

@@ -6,7 +6,7 @@ stays single-sourced.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import voluptuous as vol
@@ -116,7 +116,7 @@ def history_auto_sync_deferred_by_grace(
 
 
 def lts_row_start_to_datetime_non_str(
-    start: datetime | float | int | None,
+    start: datetime | float | None,
 ) -> datetime | None:
     """Convert LTS row ``start`` when it is not a string (strings: use HA in coordinator)."""
     if start is None:
@@ -124,7 +124,7 @@ def lts_row_start_to_datetime_non_str(
     if isinstance(start, datetime):
         return start
     if isinstance(start, (int, float)):
-        return datetime.fromtimestamp(float(start), tz=timezone.utc)
+        return datetime.fromtimestamp(float(start), tz=UTC)
     return None
 
 

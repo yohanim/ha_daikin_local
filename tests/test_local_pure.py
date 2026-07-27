@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -12,10 +12,10 @@ from tests.daikin_pure_loader import ensure_daikin_pure_and_const_loaded
 
 ensure_daikin_pure_and_const_loaded()
 
-from custom_components.daikin_local.const import (  # noqa: E402
+from custom_components.daikin_local.const import (
+    CONF_CONNECTION_TIMEOUT,
     CONF_ENERGY_GROUP_ID,
     CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER,
-    CONF_CONNECTION_TIMEOUT,
     CONF_HISTORY_AUTO_SYNC_GRACE_MINUTES,
     CONF_HISTORY_HOURS_TO_CORRECT,
     CONF_HISTORY_SKIP_EXTRA_HOURS,
@@ -24,7 +24,7 @@ from custom_components.daikin_local.const import (  # noqa: E402
     CONF_POLL_INTERVAL_STATE_SEC,
     TIMEOUT_SEC,
 )
-from custom_components.daikin_local.pure import (  # noqa: E402
+from custom_components.daikin_local.pure import (
     ATTR_DAYS_AGO,
     build_service_schema,
     connection_timeout_sec,
@@ -120,15 +120,15 @@ def test_history_window_uses_entry_when_no_service_override() -> None:
 
 
 def test_history_auto_sync_grace_defers_start_of_hour() -> None:
-    t = datetime(2026, 4, 16, 14, 4, tzinfo=timezone.utc)
+    t = datetime(2026, 4, 16, 14, 4, tzinfo=UTC)
     opts = {CONF_HISTORY_AUTO_SYNC_GRACE_MINUTES: 10}
     assert history_auto_sync_deferred_by_grace(t, opts) is True
-    t_ok = datetime(2026, 4, 16, 14, 10, 0, tzinfo=timezone.utc)
+    t_ok = datetime(2026, 4, 16, 14, 10, 0, tzinfo=UTC)
     assert history_auto_sync_deferred_by_grace(t_ok, opts) is False
 
 
 def test_history_auto_sync_grace_zero_never_defers() -> None:
-    t = datetime(2026, 4, 16, 14, 0, tzinfo=timezone.utc)
+    t = datetime(2026, 4, 16, 14, 0, tzinfo=UTC)
     assert history_auto_sync_deferred_by_grace(t, {}) is False
 
 
@@ -173,7 +173,7 @@ def test_lts_row_start_unix_timestamp() -> None:
 
 
 def test_recent_completed_hours_mapping_fixed_now() -> None:
-    tz = timezone.utc
+    tz = UTC
     now = datetime(2024, 6, 15, 14, 30, tzinfo=tz)
     m = recent_completed_hours_by_local_date(
         now,
@@ -187,7 +187,7 @@ def test_recent_completed_hours_mapping_fixed_now() -> None:
 
 
 def test_recent_completed_hours_zero_to_correct_yields_empty_when_no_backfill() -> None:
-    now = datetime(2024, 6, 15, 14, 30, tzinfo=timezone.utc)
+    now = datetime(2024, 6, 15, 14, 30, tzinfo=UTC)
     m = recent_completed_hours_by_local_date(
         now,
         skip_hours=2,
@@ -198,7 +198,7 @@ def test_recent_completed_hours_zero_to_correct_yields_empty_when_no_backfill() 
 
 
 def test_recent_completed_hours_zero_to_correct_with_extra_hour() -> None:
-    now = datetime(2024, 6, 15, 14, 30, tzinfo=timezone.utc)
+    now = datetime(2024, 6, 15, 14, 30, tzinfo=UTC)
     m = recent_completed_hours_by_local_date(
         now,
         include_extra_hour=True,

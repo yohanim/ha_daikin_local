@@ -21,6 +21,8 @@ from .pure import (
     ATTR_DAYS_AGO,
     ATTR_ENTITY_ID,
     build_service_schema,
+)
+from .pure import (
     group_has_master as _group_has_master,
 )
 
@@ -112,19 +114,13 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         days_ago = call.data.get(ATTR_DAYS_AGO, 0)
         target_entity_id = call.data.get(ATTR_ENTITY_ID)
         insert_missing = (
-            call.data[CONF_INSERT_MISSING]
-            if CONF_INSERT_MISSING in call.data
-            else None
+            call.data.get(CONF_INSERT_MISSING, None)
         )
         history_skip_extra_hours = (
-            call.data[CONF_HISTORY_SKIP_EXTRA_HOURS]
-            if CONF_HISTORY_SKIP_EXTRA_HOURS in call.data
-            else None
+            call.data.get(CONF_HISTORY_SKIP_EXTRA_HOURS, None)
         )
         history_hours_to_correct = (
-            call.data[CONF_HISTORY_HOURS_TO_CORRECT]
-            if CONF_HISTORY_HOURS_TO_CORRECT in call.data
-            else None
+            call.data.get(CONF_HISTORY_HOURS_TO_CORRECT, None)
         )
 
         for entry in _entries_for_entity_target(hass, target_entity_id):
@@ -149,19 +145,13 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         days_ago = call.data.get(ATTR_DAYS_AGO, 0)
         target_entity_id = call.data.get(ATTR_ENTITY_ID)
         insert_missing = (
-            call.data[CONF_INSERT_MISSING]
-            if CONF_INSERT_MISSING in call.data
-            else None
+            call.data.get(CONF_INSERT_MISSING, None)
         )
         history_skip_extra_hours = (
-            call.data[CONF_HISTORY_SKIP_EXTRA_HOURS]
-            if CONF_HISTORY_SKIP_EXTRA_HOURS in call.data
-            else None
+            call.data.get(CONF_HISTORY_SKIP_EXTRA_HOURS, None)
         )
         history_hours_to_correct = (
-            call.data[CONF_HISTORY_HOURS_TO_CORRECT]
-            if CONF_HISTORY_HOURS_TO_CORRECT in call.data
-            else None
+            call.data.get(CONF_HISTORY_HOURS_TO_CORRECT, None)
         )
 
         if target_entity_id:

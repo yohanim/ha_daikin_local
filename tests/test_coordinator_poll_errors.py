@@ -7,23 +7,23 @@ background-task delegation for error-stats persistence.
 from __future__ import annotations
 
 import dataclasses
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from tests.coordinator_test_support import (  # noqa: E402
+from tests.coordinator_test_support import (
     load_coordinator_module,
     pydaikin_types,
 )
 
 DaikinException, Appliance, DaikinBRP069 = pydaikin_types()
-from tests.daikin_pure_loader import ensure_daikin_pure_and_const_loaded  # noqa: E402
+from tests.daikin_pure_loader import ensure_daikin_pure_and_const_loaded
 
 ensure_daikin_pure_and_const_loaded()
 
-from custom_components.daikin_local.pure import (  # noqa: E402
+from custom_components.daikin_local.pure import (
     brp069_poll_failure_log_domain,
     format_communication_error,
     poll_error_translation_error,
@@ -33,7 +33,7 @@ from custom_components.daikin_local.pure import (  # noqa: E402
 
 pytestmark = pytest.mark.local
 
-_NOW = datetime(2026, 5, 20, 12, 0, tzinfo=timezone.utc)
+_NOW = datetime(2026, 5, 20, 12, 0, tzinfo=UTC)
 
 
 def _coordinator_module():
@@ -288,15 +288,14 @@ def test_handle_poll_error_records_capped_response_time() -> None:
     device = Appliance.__new__(Appliance)
     coordinator = _make_coordinator(mod, device=device, data=None, consecutive_failures=0)
 
-    with patch.object(mod.time, "monotonic", return_value=130.0):
-        with pytest.raises(mod.UpdateFailed):
-            coordinator._handle_poll_communication_error(
-                DaikinException("slow"),
-                now=_NOW,
-                poll_t0_mono=100.0,
-                timeout_f=30.0,
-                brp069_poll_domain=None,
-            )
+    with patch.object(mod.time, "monotonic", return_value=130.0), pytest.raises(mod.UpdateFailed):
+        coordinator._handle_poll_communication_error(
+            DaikinException("slow"),
+            now=_NOW,
+            poll_t0_mono=100.0,
+            timeout_f=30.0,
+            brp069_poll_domain=None,
+        )
 
     assert coordinator._last_state_domain_response_sec == 30.0
 
@@ -306,15 +305,14 @@ def test_handle_poll_error_brp069_records_energy_response_time() -> None:
     device = DaikinBRP069.__new__(DaikinBRP069)
     coordinator = _make_coordinator(mod, device=device, data=None, consecutive_failures=0)
 
-    with patch.object(mod.time, "monotonic", return_value=105.0):
-        with pytest.raises(mod.UpdateFailed):
-            coordinator._handle_poll_communication_error(
-                DaikinException("energy timeout"),
-                now=_NOW,
-                poll_t0_mono=100.0,
-                timeout_f=30.0,
-                brp069_poll_domain="energy",
-            )
+    with patch.object(mod.time, "monotonic", return_value=105.0), pytest.raises(mod.UpdateFailed):
+        coordinator._handle_poll_communication_error(
+            DaikinException("energy timeout"),
+            now=_NOW,
+            poll_t0_mono=100.0,
+            timeout_f=30.0,
+            brp069_poll_domain="energy",
+        )
 
     assert coordinator._last_energy_domain_response_sec == 5.0
     assert coordinator._last_state_domain_response_sec is None

@@ -6,14 +6,8 @@ import asyncio
 import logging
 from typing import Any
 
-from aiohttp import ClientError
-from pydaikin.daikin_base import Appliance
-from pydaikin.daikin_brp069 import DaikinBRP069
-from pydaikin.discovery import Discovery
-from pydaikin.exceptions import DaikinException
-from pydaikin.factory import DaikinFactory
 import voluptuous as vol
-
+from aiohttp import ClientError
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
@@ -26,6 +20,11 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
+from pydaikin.daikin_base import Appliance
+from pydaikin.daikin_brp069 import DaikinBRP069
+from pydaikin.discovery import Discovery
+from pydaikin.exceptions import DaikinException
+from pydaikin.factory import DaikinFactory
 
 from .const import (
     CONF_AUTO_HISTORY_SYNC,

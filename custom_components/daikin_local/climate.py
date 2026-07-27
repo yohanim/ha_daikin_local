@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 import logging
-from typing import Any
-
-from pydaikin.daikin_base import Appliance
+from collections.abc import Sequence
+from typing import Any, ClassVar
 
 from homeassistant.components.climate import (
     ATTR_FAN_MODE,
@@ -26,6 +24,7 @@ from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from pydaikin.daikin_base import Appliance
 
 from .const import (
     ATTR_INSIDE_TEMPERATURE,
@@ -189,7 +188,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
     _attr_name = None
     _attr_translation_key = "daikin"
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
-    _attr_hvac_modes = list(HA_STATE_TO_DAIKIN)
+    _attr_hvac_modes: ClassVar[list[str]] = list(HA_STATE_TO_DAIKIN)
     _attr_target_temperature_step = 0.5
     _attr_fan_modes: list[str]
     _attr_swing_modes: list[str]
@@ -291,7 +290,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
     @property
     def hvac_action(self) -> HVACAction | None:
         """Return the current state."""
-        if not self.device.values.get("pow") == "1":
+        if self.device.values.get("pow") != "1":
             return HVACAction.OFF
         ret = HA_STATE_TO_CURRENT_HVAC.get(self.hvac_mode)
         if (
@@ -305,7 +304,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
     @property
     def hvac_mode(self) -> HVACMode:
         """Return current operation ie. heat, cool, idle."""
-        if not self.device.values.get("pow") == "1":
+        if self.device.values.get("pow") != "1":
             return HVACMode.OFF
         daikin_mode = self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_HVAC_MODE])[1]
         return DAIKIN_TO_HA_STATE.get(
@@ -454,7 +453,7 @@ class DaikinZoneClimate(DaikinEntity, ClimateEntity):
     @property
     def hvac_mode(self) -> HVACMode:
         """Return the current HVAC mode."""
-        if not self.device.values.get("pow") == "1":
+        if self.device.values.get("pow") != "1":
             return HVACMode.OFF
         daikin_mode = self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_HVAC_MODE])[1]
         return DAIKIN_TO_HA_STATE.get(
