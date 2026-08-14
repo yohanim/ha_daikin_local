@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
@@ -17,6 +18,53 @@ DAIKIN_ATTR_STREAMER = "streamer"
 DAIKIN_ATTR_MODE = "mode"
 
 
+@dataclass(frozen=True, kw_only=True)
+class DaikinFeatureToggleDescription:
+    """Describes an on/off feature exposed via dedicated support/state/setter attributes.
+
+    Used for BRP084 (firmware 2.8.0) toggles, which are not exposed through
+    the generic ``represent``/``set_advanced_mode`` mechanism used by BRP069.
+    """
+
+    key: str
+    translation_key: str
+    support_attr: str
+    state_attr: str
+    setter: str
+
+
+FEATURE_TOGGLE_TYPES: tuple[DaikinFeatureToggleDescription, ...] = (
+    DaikinFeatureToggleDescription(
+        key="comfort",
+        translation_key="comfort",
+        support_attr="support_comfort_mode",
+        state_attr="comfort_mode",
+        setter="set_comfort_mode",
+    ),
+    DaikinFeatureToggleDescription(
+        key="econo",
+        translation_key="econo",
+        support_attr="support_econo_mode",
+        state_attr="econo_mode",
+        setter="set_econo_mode",
+    ),
+    DaikinFeatureToggleDescription(
+        key="outdoor_quiet",
+        translation_key="outdoor_quiet",
+        support_attr="support_outdoor_quiet_mode",
+        state_attr="outdoor_quiet_mode",
+        setter="set_outdoor_quiet_mode",
+    ),
+    DaikinFeatureToggleDescription(
+        key="powerful",
+        translation_key="powerful",
+        support_attr="support_powerful_mode",
+        state_attr="powerful_mode",
+        setter="set_powerful_mode",
+    ),
+)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: DaikinConfigEntry,
@@ -24,18 +72,28 @@ async def async_setup_entry(
 ) -> None:
     """Set up Daikin climate based on config_entry."""
     daikin_api = entry.runtime_data
+    device = daikin_api.device
     switches: list[SwitchEntity] = []
-    if zones := daikin_api.device.zones:
+    if zones := device.zones:
         switches.extend(
             DaikinZoneSwitch(daikin_api, zone_id)
             for zone_id, zone in enumerate(zones)
             if zone[0] != ZONE_NAME_UNCONFIGURED
         )
-    if daikin_api.device.support_advanced_modes:
+    if device.support_advanced_modes:
         # It isn't possible to find out from the API responses if a specific
         # device supports the streamer, so assume so if it does support
         # advanced modes.
         switches.append(DaikinStreamerSwitch(daikin_api))
+    if device.support_demand_control:
+        switches.append(DaikinDemandControlSwitch(daikin_api))
+    switches.extend(
+        DaikinFeatureToggleSwitch(daikin_api, description)
+        for description in FEATURE_TOGGLE_TYPES
+        # These attributes only exist on BRP084 (firmware 2.8.0); other
+        # device classes don't define them at all.
+        if getattr(device, description.support_attr, False)
+    )
     switches.append(DaikinToggleSwitch(daikin_api))
     async_add_entities(switches)
 
@@ -115,6 +173,83 @@ class DaikinStreamerSwitch(DaikinEntity, SwitchEntity):
         """Turn the zone off."""
         async with self.coordinator.pydaikin_communication_lock:
             await self.device.set_streamer("off")
+        self.async_write_ha_state()
+        await self.coordinator.async_refresh()
+
+
+class DaikinDemandControlSwitch(DaikinEntity, SwitchEntity):
+    """Demand control (max power limit) enable state.
+
+    Only available on BRP069 devices whose ``dmnd`` capability flag is set
+    (protocol v3+); pydaikin exposes this via ``support_demand_control``.
+    """
+
+    _attr_translation_key = "demand_control"
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(self, coordinator: DaikinCoordinator) -> None:
+        """Initialize switch."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{self.device.mac}-demand_control"
+
+    @property
+    def suggested_object_id(self) -> str | None:
+        return "demand_control"
+
+    @property
+    def is_on(self) -> bool:
+        """Return the state of the sensor."""
+        return self.device.get_demand_control().get("en_demand") == "1"
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Enable demand control."""
+        async with self.coordinator.pydaikin_communication_lock:
+            await self.device.set_demand_control(en_demand="on")
+        self.async_write_ha_state()
+        await self.coordinator.async_refresh()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Disable demand control."""
+        async with self.coordinator.pydaikin_communication_lock:
+            await self.device.set_demand_control(en_demand="off")
+        self.async_write_ha_state()
+        await self.coordinator.async_refresh()
+
+
+class DaikinFeatureToggleSwitch(DaikinEntity, SwitchEntity):
+    """Generic on/off toggle for a BRP084 feature (comfort, econo, outdoor quiet, powerful)."""
+
+    entity_description: DaikinFeatureToggleDescription
+
+    def __init__(
+        self, coordinator: DaikinCoordinator, description: DaikinFeatureToggleDescription
+    ) -> None:
+        """Initialize switch."""
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._attr_translation_key = description.translation_key
+        self._attr_unique_id = f"{self.device.mac}-{description.key}"
+
+    @property
+    def suggested_object_id(self) -> str | None:
+        return self.entity_description.key
+
+    @property
+    def is_on(self) -> bool:
+        """Return the state of the sensor."""
+        return getattr(self.device, self.entity_description.state_attr) == "on"
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Enable the feature."""
+        async with self.coordinator.pydaikin_communication_lock:
+            await getattr(self.device, self.entity_description.setter)("on")
+        self.async_write_ha_state()
+        await self.coordinator.async_refresh()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Disable the feature."""
+        async with self.coordinator.pydaikin_communication_lock:
+            await getattr(self.device, self.entity_description.setter)("off")
         self.async_write_ha_state()
         await self.coordinator.async_refresh()
 

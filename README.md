@@ -17,6 +17,12 @@ A custom integration for Home Assistant to locally control Daikin air conditione
   - Transient communication **warnings** in the log include a clearer exception summary (type and message, or `repr` when the message is empty).
 - **Clear default entity IDs**: For **new** devices and **new** installations, `suggested_object_id` is only the **suffix** (sensor key, `hvac`, `zone_N`, …). Home Assistant then builds `sensor.<device_slug>_<suffix>` (e.g. `sensor.salon_humidity`), so the device name is **not** duplicated in the `entity_id`.
 - **Advanced Functions**: Support for Streamer mode, Powerful (Boost), and Econo modes.
+- **Demand Control** (BRP069, protocol v3+ only, requires `pydaikin>=2.19.0`): a `Demand control` switch (disabled by default in the entity registry) toggles the feature, and the `daikin_local.set_demand_control` service sets the max power percentage and mode (manual / scheduled / auto).
+- **BRP084 support** (firmware 2.8.0, requires `pydaikin>=2.19.0`): the integration auto-detects the device via the same discovery/config flow as BRP069.
+  - Switches for `Comfort airflow`, `Econo`, `Outdoor unit quiet`, and `Powerful` (BRP084 exposes these outside the generic advanced-mode mechanism used by BRP069, so they are separate toggles rather than climate presets).
+  - `Outdoor compressor temperature` sensor (disabled by default).
+  - `daikin_local.set_brp084_options` service for the vertical vane position (`off` / `down` / `swing`) and the dry-mode comfort offset (-3.0 to 0.0°C).
+  - Outdoor/compressor sub-zero temperature readings are also fixed by the `pydaikin>=2.19.0` bump (previously decoded incorrectly on this firmware).
 - **Instant Feedback**: State updates immediately in the UI after any setting change (no more waiting for the 30s refresh cycle).
 - **Polling**:
   - Default: recurring updates use pydaikin’s `update_status()` (per device class; for BRP069 with energy this typically means `get_sensor_info`, `get_control_info`, `get_day_power_ex`, `get_week_power` — not the full init resource list, so e.g. year aggregates are not fetched on every poll).
@@ -52,6 +58,12 @@ UI strings: `custom_components/daikin_local/strings.json` (English, required by 
 3. Search for **Daikin Local**.
 4. Enter the IP address of your Daikin unit, plus **connection timeout** (max time per HTTP request) and **update interval** (coordinator cadence when not using BRP069 state/energy split).
    - *Note: It is highly recommended to set a static IP for your AC unit via your router.*
+
+### Using Daikin Local alongside Daikin Onecta (cloud)
+
+If you also run the [Daikin Onecta](https://github.com/jwillemsen/daikin_onecta) cloud integration for the **same physical unit**, note that since **Home Assistant 2026.8** a device can no longer be shared between config entries from different integrations ([device registry change](https://developers.home-assistant.io/blog/2026/07/21/device-registry-single-config-entry)). Devices that were previously merged (e.g. by model/serial match) are now split automatically on upgrade.
+
+In practice: expect **two separate device entries** in Home Assistant for the same AC unit — one for Daikin Local, one for Daikin Onecta — rather than a single merged device. This is expected behavior, not a duplicate-entity bug; entities and history for each integration remain tied to their own device as before.
 
 ## ⚡ Energy Management Details
 

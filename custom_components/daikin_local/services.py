@@ -1,8 +1,10 @@
 """Services for Daikin integration."""
+
 from __future__ import annotations
 
 import logging
 
+import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
@@ -31,6 +33,30 @@ _LOGGER = logging.getLogger(__name__)
 SERVICE_SYNC_HISTORY = "sync_history"
 SERVICE_SYNC_TOTAL_HISTORY = "sync_total_history"
 SERVICE_SCHEMA = build_service_schema(cv.boolean)
+
+SERVICE_SET_DEMAND_CONTROL = "set_demand_control"
+ATTR_EN_DEMAND = "en_demand"
+ATTR_MAX_POW = "max_pow"
+ATTR_MODE = "mode"
+SET_DEMAND_CONTROL_SCHEMA = vol.Schema(
+    {
+        vol.Optional(ATTR_ENTITY_ID): vol.Coerce(str),
+        vol.Optional(ATTR_EN_DEMAND): cv.boolean,
+        vol.Optional(ATTR_MAX_POW): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
+        vol.Optional(ATTR_MODE): vol.All(vol.Coerce(int), vol.Range(min=0, max=2)),
+    }
+)
+
+SERVICE_SET_BRP084_OPTIONS = "set_brp084_options"
+ATTR_VERTICAL_VANE = "vertical_vane"
+ATTR_DRY_COMFORT_OFFSET = "dry_comfort_offset"
+SET_BRP084_OPTIONS_SCHEMA = vol.Schema(
+    {
+        vol.Optional(ATTR_ENTITY_ID): vol.Coerce(str),
+        vol.Optional(ATTR_VERTICAL_VANE): vol.In(["off", "down", "swing"]),
+        vol.Optional(ATTR_DRY_COMFORT_OFFSET): vol.Coerce(float),
+    }
+)
 
 
 def _loaded_config_entries(hass: HomeAssistant) -> list[ConfigEntry]:
@@ -113,15 +139,9 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         """Sync history for all or specific Daikin devices."""
         days_ago = call.data.get(ATTR_DAYS_AGO, 0)
         target_entity_id = call.data.get(ATTR_ENTITY_ID)
-        insert_missing = (
-            call.data.get(CONF_INSERT_MISSING, None)
-        )
-        history_skip_extra_hours = (
-            call.data.get(CONF_HISTORY_SKIP_EXTRA_HOURS, None)
-        )
-        history_hours_to_correct = (
-            call.data.get(CONF_HISTORY_HOURS_TO_CORRECT, None)
-        )
+        insert_missing = call.data.get(CONF_INSERT_MISSING, None)
+        history_skip_extra_hours = call.data.get(CONF_HISTORY_SKIP_EXTRA_HOURS, None)
+        history_hours_to_correct = call.data.get(CONF_HISTORY_HOURS_TO_CORRECT, None)
 
         for entry in _entries_for_entity_target(hass, target_entity_id):
             coordinator = entry.runtime_data
@@ -144,15 +164,9 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         """Sync only the Daikin total/compressor energy history."""
         days_ago = call.data.get(ATTR_DAYS_AGO, 0)
         target_entity_id = call.data.get(ATTR_ENTITY_ID)
-        insert_missing = (
-            call.data.get(CONF_INSERT_MISSING, None)
-        )
-        history_skip_extra_hours = (
-            call.data.get(CONF_HISTORY_SKIP_EXTRA_HOURS, None)
-        )
-        history_hours_to_correct = (
-            call.data.get(CONF_HISTORY_HOURS_TO_CORRECT, None)
-        )
+        insert_missing = call.data.get(CONF_INSERT_MISSING, None)
+        history_skip_extra_hours = call.data.get(CONF_HISTORY_SKIP_EXTRA_HOURS, None)
+        history_hours_to_correct = call.data.get(CONF_HISTORY_HOURS_TO_CORRECT, None)
 
         if target_entity_id:
             entries = _entries_for_entity_target(hass, target_entity_id)
@@ -200,4 +214,71 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         SERVICE_SYNC_TOTAL_HISTORY,
         async_sync_total_history,
         schema=SERVICE_SCHEMA,
+    )
+
+    async def async_set_demand_control(call: ServiceCall) -> None:
+        """Set demand control (max power limit) on one or all Daikin devices."""
+        target_entity_id = call.data.get(ATTR_ENTITY_ID)
+        en_demand = call.data.get(ATTR_EN_DEMAND)
+        max_pow = call.data.get(ATTR_MAX_POW)
+        mode = call.data.get(ATTR_MODE)
+
+        for entry in _entries_for_entity_target(hass, target_entity_id):
+            coordinator = entry.runtime_data
+            if not coordinator.device.support_demand_control:
+                _LOGGER.warning(
+                    "[service] %s does not support demand control; skipping",
+                    entry.title,
+                )
+                continue
+            async with coordinator.pydaikin_communication_lock:
+                await coordinator.device.set_demand_control(
+                    en_demand=None
+                    if en_demand is None
+                    else ("on" if en_demand else "off"),
+                    max_pow=max_pow,
+                    mode=mode,
+                )
+            await coordinator.async_refresh()
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_DEMAND_CONTROL,
+        async_set_demand_control,
+        schema=SET_DEMAND_CONTROL_SCHEMA,
+    )
+
+    async def async_set_brp084_options(call: ServiceCall) -> None:
+        """Set BRP084-only vertical vane position and/or dry-mode comfort offset."""
+        target_entity_id = call.data.get(ATTR_ENTITY_ID)
+        vertical_vane = call.data.get(ATTR_VERTICAL_VANE)
+        dry_comfort_offset = call.data.get(ATTR_DRY_COMFORT_OFFSET)
+
+        for entry in _entries_for_entity_target(hass, target_entity_id):
+            coordinator = entry.runtime_data
+            device = coordinator.device
+            async with coordinator.pydaikin_communication_lock:
+                if vertical_vane is not None:
+                    if hasattr(device, "set_vertical_vane"):
+                        await device.set_vertical_vane(vertical_vane)
+                    else:
+                        _LOGGER.warning(
+                            "[service] %s does not support vertical vane control; skipping",
+                            entry.title,
+                        )
+                if dry_comfort_offset is not None:
+                    if getattr(device, "support_dry_comfort_offset", False):
+                        await device.set_dry_comfort_offset(dry_comfort_offset)
+                    else:
+                        _LOGGER.warning(
+                            "[service] %s does not support dry comfort offset; skipping",
+                            entry.title,
+                        )
+            await coordinator.async_refresh()
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_BRP084_OPTIONS,
+        async_set_brp084_options,
+        schema=SET_BRP084_OPTIONS_SCHEMA,
     )

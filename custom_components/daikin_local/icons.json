@@ -40,6 +40,9 @@
       },
       "heat_energy_consumption": {
         "default": "mdi:fire"
+      },
+      "compressor_temperature": {
+        "default": "mdi:thermometer"
       }
     },
     "switch": {
@@ -48,6 +51,21 @@
       },
       "toggle": {
         "default": "mdi:power"
+      },
+      "demand_control": {
+        "default": "mdi:transmission-tower-off"
+      },
+      "comfort": {
+        "default": "mdi:weather-windy"
+      },
+      "econo": {
+        "default": "mdi:leaf"
+      },
+      "outdoor_quiet": {
+        "default": "mdi:volume-off"
+      },
+      "powerful": {
+        "default": "mdi:rocket-launch"
       },
       "zone": {
         "default": "mdi:home-circle"

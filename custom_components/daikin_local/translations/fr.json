@@ -121,6 +121,46 @@
           "description": "Comme sync_history : pas de borne minimale si renseigné."
         }
       }
+    },
+    "set_demand_control": {
+      "name": "Régler le contrôle de la demande",
+      "description": "Active/désactive le contrôle de la demande et règle la puissance maximale sur les unités Daikin BRP069 qui le supportent (protocole v3+).",
+      "fields": {
+        "entity_id": {
+          "name": "Entité cible (optionnel)",
+          "description": "Si renseigné, seule l'entrée de configuration propriétaire de cette entité exécute le service."
+        },
+        "en_demand": {
+          "name": "Activer le contrôle de la demande",
+          "description": "Active ou désactive le contrôle de la demande. La désactivation remet aussi le mode à manuel et la puissance max à 100%."
+        },
+        "max_pow": {
+          "name": "Puissance max (%)",
+          "description": "Puissance maximale en pourcentage de la puissance nominale de l'unité (0-100). Utilisé uniquement en mode manuel."
+        },
+        "mode": {
+          "name": "Mode",
+          "description": "Mode de contrôle de la demande : 0 = manuel (puissance max fixe), 1 = programmé, 2 = auto (l'unité gère elle-même la limite)."
+        }
+      }
+    },
+    "set_brp084_options": {
+      "name": "Régler les options BRP084",
+      "description": "Règle la position du volet vertical et/ou le décalage de confort en mode sec sur les unités Daikin BRP084 (firmware 2.8.0).",
+      "fields": {
+        "entity_id": {
+          "name": "Entité cible (optionnel)",
+          "description": "Si renseigné, seule l'entrée de configuration propriétaire de cette entité exécute le service."
+        },
+        "vertical_vane": {
+          "name": "Position du volet vertical",
+          "description": "Position discrète du volet vertical : off (neutre), down (vers le sol), ou swing (oscillation)."
+        },
+        "dry_comfort_offset": {
+          "name": "Décalage confort mode sec (°C)",
+          "description": "Décalage de confort en mode sec, en degrés Celsius (-3,0 à 0,0, pas de 0,5)."
+        }
+      }
     }
   },
   "entity": {
@@ -206,6 +246,9 @@
       },
       "compressor_energy_consumption": {
         "name": "Énergie totale du compresseur"
+      },
+      "compressor_temperature": {
+        "name": "Température du compresseur extérieur"
       }
     },
     "switch": {
@@ -214,6 +257,21 @@
       },
       "streamer": {
         "name": "Streamer"
+      },
+      "demand_control": {
+        "name": "Contrôle de la demande"
+      },
+      "comfort": {
+        "name": "Flux confort"
+      },
+      "econo": {
+        "name": "Econo"
+      },
+      "outdoor_quiet": {
+        "name": "Mode silencieux (unité extérieure)"
+      },
+      "powerful": {
+        "name": "Powerful"
       },
       "zone": {
         "name": "Zone"

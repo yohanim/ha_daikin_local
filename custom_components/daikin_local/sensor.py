@@ -25,6 +25,7 @@ from pydaikin.daikin_brp069 import DaikinBRP069
 
 from .const import (
     ATTR_COMPRESSOR_FREQUENCY,
+    ATTR_COMPRESSOR_TEMPERATURE,
     ATTR_COOL_ENERGY,
     ATTR_ENERGY_TODAY,
     ATTR_HEAT_ENERGY,
@@ -149,6 +150,15 @@ SENSOR_TYPES: tuple[DaikinSensorEntityDescription, ...] = (
         entity_registry_enabled_default=False,
         value_func=lambda data: round(data.calculated_total_energy_today, 2),
     ),
+    DaikinSensorEntityDescription(
+        key=ATTR_COMPRESSOR_TEMPERATURE,
+        translation_key="compressor_temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        entity_registry_enabled_default=False,
+        value_func=lambda data: data.appliance.compressor_temperature,
+    ),
 )
 
 DIAGNOSTIC_SENSOR_TYPES: tuple[DaikinDiagnosticSensorEntityDescription, ...] = (
@@ -244,6 +254,9 @@ async def async_setup_entry(
             )
         elif description.key == ATTR_COMPRESSOR_FREQUENCY:
             supported = device.support_compressor_frequency
+        elif description.key == ATTR_COMPRESSOR_TEMPERATURE:
+            # BRP084-only; not defined on the base Appliance/BRP069 classes.
+            supported = getattr(device, "support_compressor_temperature", False)
 
         if supported:
             entities.append(DaikinSensor(coordinator, description))

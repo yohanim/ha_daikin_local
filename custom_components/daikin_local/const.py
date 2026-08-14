@@ -10,6 +10,8 @@ ATTR_TARGET_HUMIDITY = "target_humidity"
 ATTR_HUMIDITY = "humidity"
 
 ATTR_COMPRESSOR_FREQUENCY = "compressor_frequency"
+# BRP084 (firmware 2.8.0) outdoor unit compressor temperature; not available on BRP069.
+ATTR_COMPRESSOR_TEMPERATURE = "compressor_temperature"
 
 ATTR_ENERGY_TODAY = "energy_today"
 ATTR_COOL_ENERGY = "cool_energy"

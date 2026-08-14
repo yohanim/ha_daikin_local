@@ -121,6 +121,46 @@
           "description": "Same as sync_history: optional override. Unclamped when set."
         }
       }
+    },
+    "set_demand_control": {
+      "name": "Set demand control",
+      "description": "Enable/disable demand control and set the max power limit on Daikin BRP069 units that support it (protocol v3+).",
+      "fields": {
+        "entity_id": {
+          "name": "Target entity (optional)",
+          "description": "If set, only the config entry that owns this entity runs the service."
+        },
+        "en_demand": {
+          "name": "Enable demand control",
+          "description": "Turn demand control on or off. Turning it off also resets mode to manual and max power to 100%."
+        },
+        "max_pow": {
+          "name": "Max power (%)",
+          "description": "Maximum power as a percentage of the unit's nominal power (0-100). Only used in manual mode."
+        },
+        "mode": {
+          "name": "Mode",
+          "description": "Demand control mode: 0 = manual (fixed max power), 1 = scheduled, 2 = auto (unit manages the limit itself)."
+        }
+      }
+    },
+    "set_brp084_options": {
+      "name": "Set BRP084 options",
+      "description": "Set the vertical vane position and/or dry-mode comfort offset on Daikin BRP084 (firmware 2.8.0) units.",
+      "fields": {
+        "entity_id": {
+          "name": "Target entity (optional)",
+          "description": "If set, only the config entry that owns this entity runs the service."
+        },
+        "vertical_vane": {
+          "name": "Vertical vane position",
+          "description": "Discrete vertical vane position: off (neutral), down (floor), or swing (oscillate)."
+        },
+        "dry_comfort_offset": {
+          "name": "Dry comfort offset (°C)",
+          "description": "Dry-mode comfort offset in degrees Celsius (-3.0 to 0.0, 0.5 steps)."
+        }
+      }
     }
   },
   "entity": {
@@ -206,6 +246,9 @@
       },
       "target_humidity": {
         "name": "Target humidity"
+      },
+      "compressor_temperature": {
+        "name": "Outdoor compressor temperature"
       }
     },
     "switch": {
@@ -214,6 +257,21 @@
       },
       "streamer": {
         "name": "Streamer"
+      },
+      "demand_control": {
+        "name": "Demand control"
+      },
+      "comfort": {
+        "name": "Comfort airflow"
+      },
+      "econo": {
+        "name": "Econo"
+      },
+      "outdoor_quiet": {
+        "name": "Outdoor unit quiet"
+      },
+      "powerful": {
+        "name": "Powerful"
       },
       "zone": {
         "name": "Zone"
