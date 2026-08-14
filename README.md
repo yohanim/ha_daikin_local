@@ -17,7 +17,7 @@ A custom integration for Home Assistant to locally control Daikin air conditione
   - Transient communication **warnings** in the log include a clearer exception summary (type and message, or `repr` when the message is empty).
 - **Clear default entity IDs**: For **new** devices and **new** installations, `suggested_object_id` is only the **suffix** (sensor key, `hvac`, `zone_N`, …). Home Assistant then builds `sensor.<device_slug>_<suffix>` (e.g. `sensor.salon_humidity`), so the device name is **not** duplicated in the `entity_id`.
 - **Advanced Functions**: Support for Streamer mode, Powerful (Boost), and Econo modes.
-- **Demand Control** (BRP069, protocol v3+ only, requires `pydaikin>=2.19.0`): a `Demand control` switch (disabled by default in the entity registry) toggles the feature, and the `daikin_local.set_demand_control` service sets the max power percentage and mode (manual / scheduled / auto).
+- **Demand Control** (BRP069, protocol v3+ only, requires `pydaikin>=2.19.0`): a `Demand control` switch and a `Demand control max power` number entity (both disabled by default in the entity registry) toggle the feature and set the max power percentage from the dashboard; the `daikin_local.set_demand_control` service also covers max power plus the mode (manual / scheduled / auto).
 - **BRP084 support** (firmware 2.8.0, requires `pydaikin>=2.19.0`): the integration auto-detects the device via the same discovery/config flow as BRP069.
   - Switches for `Comfort airflow`, `Econo`, `Outdoor unit quiet`, and `Powerful` (BRP084 exposes these outside the generic advanced-mode mechanism used by BRP069, so they are separate toggles rather than climate presets).
   - `Outdoor compressor temperature` sensor (disabled by default).
