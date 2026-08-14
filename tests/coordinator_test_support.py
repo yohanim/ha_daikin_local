@@ -180,6 +180,7 @@ def install_extra_stubs_for_init() -> None:
 
             class _Platform:
                 CLIMATE = "climate"
+                NUMBER = "number"
                 SENSOR = "sensor"
                 SWITCH = "switch"
 

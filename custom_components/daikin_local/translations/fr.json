@@ -251,6 +251,11 @@
         "name": "Température du compresseur extérieur"
       }
     },
+    "number": {
+      "demand_control_max_power": {
+        "name": "Puissance max (contrôle de la demande)"
+      }
+    },
     "switch": {
       "toggle": {
         "name": "Alimentation"

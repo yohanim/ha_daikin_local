@@ -58,7 +58,7 @@ _OBSOLETE_HISTORY_ERROR_UNIQUE_ID_SUFFIXES: tuple[str, ...] = (
     "-daily_history_error",
 )
 
-PLATFORMS = [Platform.CLIMATE, Platform.SENSOR, Platform.SWITCH]
+PLATFORMS = [Platform.CLIMATE, Platform.NUMBER, Platform.SENSOR, Platform.SWITCH]
 
 _OBSOLETE_CONFIG_KEYS = frozenset({"api_key", "password", "uuid"})
 _LEGACY_OPTION_SKIP_HOURS = "history_skip_hours"

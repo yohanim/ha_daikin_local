@@ -45,6 +45,11 @@
         "default": "mdi:thermometer"
       }
     },
+    "number": {
+      "demand_control_max_power": {
+        "default": "mdi:transmission-tower-off"
+      }
+    },
     "switch": {
       "streamer": {
         "default": "mdi:air-filter"
