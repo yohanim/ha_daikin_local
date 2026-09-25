@@ -14,10 +14,9 @@ from unittest.mock import AsyncMock, call, patch
 
 import pytest
 
-from tests.coordinator_test_support import load_coordinator_module, pydaikin_types
+from tests.coordinator_test_support import load_coordinator_module
 from tests.daikin_pure_loader import ensure_daikin_pure_and_const_loaded
 
-_DaikinException, _Appliance, DaikinBRP069 = pydaikin_types()
 ensure_daikin_pure_and_const_loaded()
 
 pytestmark = pytest.mark.local
@@ -27,6 +26,23 @@ _STATE_INTERVAL = 60
 _ENERGY_INTERVAL = 300
 # 10s ago: below both intervals above, so "not due" for either domain.
 _RECENTLY_POLLED_MONO = _NOW_MONO - 10
+
+
+class _FakeBRP069:
+    """Minimal stand-in for pydaikin's ``DaikinBRP069``.
+
+    Deliberately does NOT subclass the real class: in real pydaikin,
+    ``support_energy_consumption`` is a read-only ``@property`` computed from
+    ``self.values``, so assigning it directly (as these tests need to, to force
+    each scheduling branch) raises ``AttributeError``. ``mod.DaikinBRP069`` is
+    monkeypatched to this class for the duration of the call under test, so
+    ``isinstance(self.device, DaikinBRP069)`` in the coordinator still matches.
+    """
+
+    def __init__(self, *, support_energy_consumption: bool) -> None:
+        self.support_energy_consumption = support_energy_consumption
+        self.values: dict = {}
+        self.update_status = AsyncMock()
 
 
 def _coordinator_module():
@@ -40,10 +56,7 @@ def _make_brp069_coordinator(
     last_energy_poll_mono: float | None,
     support_energy_consumption: bool = True,
 ):
-    device = object.__new__(DaikinBRP069)
-    device.support_energy_consumption = support_energy_consumption
-    device.values = {}
-    device.update_status = AsyncMock()
+    device = _FakeBRP069(support_energy_consumption=support_energy_consumption)
 
     coordinator = object.__new__(mod.DaikinCoordinator)
     coordinator.device = device
@@ -68,7 +81,10 @@ def _make_brp069_coordinator(
 
 
 async def _run_update(mod, coordinator):
-    with patch.object(mod.time, "monotonic", return_value=_NOW_MONO):
+    with (
+        patch.object(mod, "DaikinBRP069", _FakeBRP069),
+        patch.object(mod.time, "monotonic", return_value=_NOW_MONO),
+    ):
         return await coordinator._async_update_data()
 
 
