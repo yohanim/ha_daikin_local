@@ -43,6 +43,9 @@
       },
       "compressor_temperature": {
         "default": "mdi:thermometer"
+      },
+      "wifi_signal": {
+        "default": "mdi:wifi"
       }
     },
     "number": {
@@ -59,6 +62,9 @@
       },
       "demand_control": {
         "default": "mdi:transmission-tower-off"
+      },
+      "adapter_led": {
+        "default": "mdi:led-on"
       },
       "comfort": {
         "default": "mdi:weather-windy"

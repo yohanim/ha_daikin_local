@@ -133,6 +133,9 @@ def install_ha_stubs_for_coordinator() -> None:
     dt_mod = sys.modules["homeassistant.util.dt"]
     dt_mod.utcnow = lambda: datetime.now(UTC)
     dt_mod.as_local = lambda value: value
+    dt_mod.start_of_local_day = lambda: datetime.now(UTC).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
 
     storage_mod = sys.modules["homeassistant.helpers.storage"]
 

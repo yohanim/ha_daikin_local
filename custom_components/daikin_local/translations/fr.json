@@ -249,6 +249,9 @@
       },
       "compressor_temperature": {
         "name": "Température du compresseur extérieur"
+      },
+      "wifi_signal": {
+        "name": "Puissance du signal Wi-Fi"
       }
     },
     "number": {
@@ -265,6 +268,9 @@
       },
       "demand_control": {
         "name": "Contrôle de la demande"
+      },
+      "adapter_led": {
+        "name": "LED de l'adaptateur"
       },
       "comfort": {
         "name": "Flux confort"

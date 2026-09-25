@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
@@ -19,6 +20,7 @@ from .const import (
     CONF_INSERT_MISSING,
     DOMAIN,
 )
+from .entity import async_execute_daikin_command
 from .pure import (
     ATTR_DAYS_AGO,
     ATTR_ENTITY_ID,
@@ -231,14 +233,16 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                     entry.title,
                 )
                 continue
-            async with coordinator.pydaikin_communication_lock:
-                await coordinator.device.set_demand_control(
+            await async_execute_daikin_command(
+                coordinator,
+                lambda coordinator=coordinator: coordinator.device.set_demand_control(
                     en_demand=None
                     if en_demand is None
                     else ("on" if en_demand else "off"),
                     max_pow=max_pow,
                     mode=mode,
-                )
+                ),
+            )
             await coordinator.async_refresh()
 
     hass.services.async_register(
@@ -247,6 +251,31 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         async_set_demand_control,
         schema=SET_DEMAND_CONTROL_SCHEMA,
     )
+
+    async def _apply_brp084_options(
+        device: Any,
+        entry_title: str,
+        *,
+        vertical_vane: str | None,
+        dry_comfort_offset: float | None,
+    ) -> None:
+        """Apply the requested BRP084 options to a single device (runs under its lock)."""
+        if vertical_vane is not None:
+            if hasattr(device, "set_vertical_vane"):
+                await device.set_vertical_vane(vertical_vane)
+            else:
+                _LOGGER.warning(
+                    "[service] %s does not support vertical vane control; skipping",
+                    entry_title,
+                )
+        if dry_comfort_offset is not None:
+            if getattr(device, "support_dry_comfort_offset", False):
+                await device.set_dry_comfort_offset(dry_comfort_offset)
+            else:
+                _LOGGER.warning(
+                    "[service] %s does not support dry comfort offset; skipping",
+                    entry_title,
+                )
 
     async def async_set_brp084_options(call: ServiceCall) -> None:
         """Set BRP084-only vertical vane position and/or dry-mode comfort offset."""
@@ -257,23 +286,16 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         for entry in _entries_for_entity_target(hass, target_entity_id):
             coordinator = entry.runtime_data
             device = coordinator.device
-            async with coordinator.pydaikin_communication_lock:
-                if vertical_vane is not None:
-                    if hasattr(device, "set_vertical_vane"):
-                        await device.set_vertical_vane(vertical_vane)
-                    else:
-                        _LOGGER.warning(
-                            "[service] %s does not support vertical vane control; skipping",
-                            entry.title,
-                        )
-                if dry_comfort_offset is not None:
-                    if getattr(device, "support_dry_comfort_offset", False):
-                        await device.set_dry_comfort_offset(dry_comfort_offset)
-                    else:
-                        _LOGGER.warning(
-                            "[service] %s does not support dry comfort offset; skipping",
-                            entry.title,
-                        )
+
+            await async_execute_daikin_command(
+                coordinator,
+                lambda device=device, title=entry.title: _apply_brp084_options(
+                    device,
+                    title,
+                    vertical_vane=vertical_vane,
+                    dry_comfort_offset=dry_comfort_offset,
+                ),
+            )
             await coordinator.async_refresh()
 
     hass.services.async_register(

@@ -51,7 +51,6 @@ class DaikinDemandControlMaxPowerNumber(DaikinEntity, NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Set the max power percentage."""
-        async with self.coordinator.pydaikin_communication_lock:
-            await self.device.set_demand_control(max_pow=int(value))
-        self.async_write_ha_state()
-        await self.coordinator.async_refresh()
+        await self._async_execute_command(
+            lambda: self.device.set_demand_control(max_pow=int(value))
+        )

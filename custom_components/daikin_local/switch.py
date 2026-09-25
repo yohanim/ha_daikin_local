@@ -9,11 +9,10 @@ from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import ZONE_NAME_UNCONFIGURED
+from .const import DAIKIN_ATTR_ADVANCED, ZONE_NAME_UNCONFIGURED
 from .coordinator import DaikinConfigEntry, DaikinCoordinator
 from .entity import DaikinEntity
 
-DAIKIN_ATTR_ADVANCED = "adv"
 DAIKIN_ATTR_STREAMER = "streamer"
 DAIKIN_ATTR_MODE = "mode"
 
@@ -87,6 +86,8 @@ async def async_setup_entry(
         switches.append(DaikinStreamerSwitch(daikin_api))
     if device.support_demand_control:
         switches.append(DaikinDemandControlSwitch(daikin_api))
+    if getattr(device, "support_led", False):
+        switches.append(DaikinAdapterLedSwitch(daikin_api))
     switches.extend(
         DaikinFeatureToggleSwitch(daikin_api, description)
         for description in FEATURE_TOGGLE_TYPES
@@ -124,17 +125,15 @@ class DaikinZoneSwitch(DaikinEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the zone on."""
-        async with self.coordinator.pydaikin_communication_lock:
-            await self.device.set_zone(self._zone_id, "zone_onoff", "1")
-        self.async_write_ha_state()
-        await self.coordinator.async_refresh()
+        await self._async_execute_command(
+            lambda: self.device.set_zone(self._zone_id, "zone_onoff", "1")
+        )
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the zone off."""
-        async with self.coordinator.pydaikin_communication_lock:
-            await self.device.set_zone(self._zone_id, "zone_onoff", "0")
-        self.async_write_ha_state()
-        await self.coordinator.async_refresh()
+        await self._async_execute_command(
+            lambda: self.device.set_zone(self._zone_id, "zone_onoff", "0")
+        )
 
 
 class DaikinStreamerSwitch(DaikinEntity, SwitchEntity):
@@ -164,17 +163,11 @@ class DaikinStreamerSwitch(DaikinEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the zone on."""
-        async with self.coordinator.pydaikin_communication_lock:
-            await self.device.set_streamer("on")
-        self.async_write_ha_state()
-        await self.coordinator.async_refresh()
+        await self._async_execute_command(lambda: self.device.set_streamer("on"))
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the zone off."""
-        async with self.coordinator.pydaikin_communication_lock:
-            await self.device.set_streamer("off")
-        self.async_write_ha_state()
-        await self.coordinator.async_refresh()
+        await self._async_execute_command(lambda: self.device.set_streamer("off"))
 
 
 class DaikinDemandControlSwitch(DaikinEntity, SwitchEntity):
@@ -203,17 +196,47 @@ class DaikinDemandControlSwitch(DaikinEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Enable demand control."""
-        async with self.coordinator.pydaikin_communication_lock:
-            await self.device.set_demand_control(en_demand="on")
-        self.async_write_ha_state()
-        await self.coordinator.async_refresh()
+        await self._async_execute_command(
+            lambda: self.device.set_demand_control(en_demand="on")
+        )
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Disable demand control."""
-        async with self.coordinator.pydaikin_communication_lock:
-            await self.device.set_demand_control(en_demand="off")
-        self.async_write_ha_state()
-        await self.coordinator.async_refresh()
+        await self._async_execute_command(
+            lambda: self.device.set_demand_control(en_demand="off")
+        )
+
+
+class DaikinAdapterLedSwitch(DaikinEntity, SwitchEntity):
+    """Status LED of the Wi-Fi adapter itself (BRP069A/B/C only).
+
+    pydaikin exposes this via ``support_led``/``get_led``/``set_led``.
+    """
+
+    _attr_translation_key = "adapter_led"
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(self, coordinator: DaikinCoordinator) -> None:
+        """Initialize switch."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{self.device.mac}-adapter_led"
+
+    @property
+    def suggested_object_id(self) -> str | None:
+        return "adapter_led"
+
+    @property
+    def is_on(self) -> bool:
+        """Return the state of the sensor."""
+        return self.device.get_led() == "on"
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Turn the adapter LED on."""
+        await self._async_execute_command(lambda: self.device.set_led("on"))
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Turn the adapter LED off."""
+        await self._async_execute_command(lambda: self.device.set_led("off"))
 
 
 class DaikinFeatureToggleSwitch(DaikinEntity, SwitchEntity):
@@ -241,17 +264,15 @@ class DaikinFeatureToggleSwitch(DaikinEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Enable the feature."""
-        async with self.coordinator.pydaikin_communication_lock:
-            await getattr(self.device, self.entity_description.setter)("on")
-        self.async_write_ha_state()
-        await self.coordinator.async_refresh()
+        await self._async_execute_command(
+            lambda: getattr(self.device, self.entity_description.setter)("on")
+        )
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Disable the feature."""
-        async with self.coordinator.pydaikin_communication_lock:
-            await getattr(self.device, self.entity_description.setter)("off")
-        self.async_write_ha_state()
-        await self.coordinator.async_refresh()
+        await self._async_execute_command(
+            lambda: getattr(self.device, self.entity_description.setter)("off")
+        )
 
 
 class DaikinToggleSwitch(DaikinEntity, SwitchEntity):
@@ -275,14 +296,10 @@ class DaikinToggleSwitch(DaikinEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the zone on."""
-        async with self.coordinator.pydaikin_communication_lock:
-            await self.device.set({})
-        self.async_write_ha_state()
-        await self.coordinator.async_refresh()
+        await self._async_execute_command(lambda: self.device.set({}))
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the zone off."""
-        async with self.coordinator.pydaikin_communication_lock:
-            await self.device.set({DAIKIN_ATTR_MODE: "off"})
-        self.async_write_ha_state()
-        await self.coordinator.async_refresh()
+        await self._async_execute_command(
+            lambda: self.device.set({DAIKIN_ATTR_MODE: "off"})
+        )

@@ -4,6 +4,7 @@ import asyncio
 import logging
 import re
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
@@ -129,6 +130,14 @@ def _update_failed_for_poll_error(err: Exception) -> UpdateFailed:
 def _poll_duration_sec_since(start_mono: float, *, cap_sec: float) -> float:
     """Elapsed seconds since ``start_mono``, capped (e.g. to connection timeout)."""
     return round(min(time.monotonic() - start_mono, cap_sec), 3)
+
+
+def _normalize_24_hours(values: list[int]) -> list[int]:
+    """Pad/truncate an hourly Daikin data series to exactly 24 entries."""
+    values = values[:24]
+    if len(values) < 24:
+        values += [0] * (24 - len(values))
+    return values
 
 
 type DaikinConfigEntry = ConfigEntry[DaikinCoordinator]
@@ -348,6 +357,24 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         return self._pydaikin_communication_lock
 
     @property
+    def connection_timeout_sec(self) -> int:
+        """HTTP request timeout (seconds), same source as polling."""
+        return _connection_timeout_sec(self.config_entry)
+
+    async def async_execute_command(
+        self, command: Callable[[], Awaitable[None]]
+    ) -> None:
+        """Run a device command under the shared communication lock, bounded by a timeout.
+
+        Without this timeout, a command that never returns (e.g. the adapter drops the
+        connection mid-request) would hold the lock forever and every subsequent poll
+        would fail waiting for it, leaving the entity permanently unavailable.
+        """
+        async with asyncio.timeout(self.connection_timeout_sec):
+            async with self._pydaikin_communication_lock:
+                await command()
+
+    @property
     def last_state_domain_response_sec(self) -> float | None:
         """Seconds for the last state-domain ``update_status`` attempt (success or failure).
 
@@ -425,6 +452,8 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 insert_missing=None,
             )
         except Exception as err:  # noqa: BLE001
+            # Broad on purpose: any failure here (recorder, pydaikin parsing, ...) must
+            # not fail the coordinator update itself (sensor data was already refreshed).
             # Widen next run's window to backfill one extra hour.
             self._history_backfill_extra_hour = True
             _LOGGER.warning(
@@ -467,6 +496,26 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         poll_t0_mono: float | None = None
         timeout_f = float(timeout)
 
+        async def _poll_brp069_domain(domain: str, resources: tuple[str, ...]) -> None:
+            """Poll one BRP069 domain and record its response time / last-poll instant.
+
+            Uses ``nonlocal`` so the enclosing ``except`` blocks can still attribute a
+            failure to the right domain (mirrors what the pre-refactor inline code did).
+            """
+            nonlocal brp069_poll_domain, poll_t0_mono
+            brp069_poll_domain = domain
+            poll_t0_mono = time.monotonic()
+            await self.device.update_status(list(resources))
+            elapsed = _poll_duration_sec_since(poll_t0_mono, cap_sec=timeout_f)
+            if domain == "state":
+                self._last_state_domain_response_sec = elapsed
+                self._brp069_last_state_poll_mono = now_mono
+            else:
+                self._last_energy_domain_response_sec = elapsed
+                self._brp069_last_energy_poll_mono = now_mono
+            brp069_poll_domain = None
+            poll_t0_mono = None
+
         try:
             async with asyncio.timeout(timeout):
                 async with self._pydaikin_communication_lock:
@@ -492,67 +541,27 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                                 "[coordinator] Updating %s via update_status (state minimal)",
                                 self.name,
                             )
-                            brp069_poll_domain = "state"
-                            poll_t0_mono = time.monotonic()
-                            await self.device.update_status(list(BRP069_STATE_RESOURCES))
-                            brp069_poll_domain = None
-                            self._last_state_domain_response_sec = _poll_duration_sec_since(
-                                poll_t0_mono, cap_sec=timeout_f
-                            )
-                            poll_t0_mono = None
-                            self._brp069_last_state_poll_mono = now_mono
+                            await _poll_brp069_domain("state", BRP069_STATE_RESOURCES)
                         elif state_due and energy_due:
                             _LOGGER.debug(
                                 "[coordinator] Updating %s via update_status (state then energy)",
                                 self.name,
                             )
-                            brp069_poll_domain = "state"
-                            poll_t0_mono = time.monotonic()
-                            await self.device.update_status(list(BRP069_STATE_RESOURCES))
-                            brp069_poll_domain = None
-                            self._last_state_domain_response_sec = _poll_duration_sec_since(
-                                poll_t0_mono, cap_sec=timeout_f
-                            )
-                            poll_t0_mono = None
-                            self._brp069_last_state_poll_mono = now_mono
-                            brp069_poll_domain = "energy"
-                            poll_t0_mono = time.monotonic()
-                            await self.device.update_status(list(BRP069_ENERGY_RESOURCES))
-                            brp069_poll_domain = None
-                            self._last_energy_domain_response_sec = _poll_duration_sec_since(
-                                poll_t0_mono, cap_sec=timeout_f
-                            )
-                            poll_t0_mono = None
-                            self._brp069_last_energy_poll_mono = now_mono
+                            await _poll_brp069_domain("state", BRP069_STATE_RESOURCES)
+                            await _poll_brp069_domain("energy", BRP069_ENERGY_RESOURCES)
                             brp069_energy_attempted = True
                         elif state_due:
                             _LOGGER.debug(
                                 "[coordinator] Updating %s via update_status (state)",
                                 self.name,
                             )
-                            brp069_poll_domain = "state"
-                            poll_t0_mono = time.monotonic()
-                            await self.device.update_status(list(BRP069_STATE_RESOURCES))
-                            brp069_poll_domain = None
-                            self._last_state_domain_response_sec = _poll_duration_sec_since(
-                                poll_t0_mono, cap_sec=timeout_f
-                            )
-                            poll_t0_mono = None
-                            self._brp069_last_state_poll_mono = now_mono
+                            await _poll_brp069_domain("state", BRP069_STATE_RESOURCES)
                         else:
                             _LOGGER.debug(
                                 "[coordinator] Updating %s via update_status (energy)",
                                 self.name,
                             )
-                            brp069_poll_domain = "energy"
-                            poll_t0_mono = time.monotonic()
-                            await self.device.update_status(list(BRP069_ENERGY_RESOURCES))
-                            brp069_poll_domain = None
-                            self._last_energy_domain_response_sec = _poll_duration_sec_since(
-                                poll_t0_mono, cap_sec=timeout_f
-                            )
-                            poll_t0_mono = None
-                            self._brp069_last_energy_poll_mono = now_mono
+                            await _poll_brp069_domain("energy", BRP069_ENERGY_RESOURCES)
                             brp069_energy_attempted = True
                     else:
                         _LOGGER.debug(
@@ -573,6 +582,9 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 brp069_poll_domain=brp069_poll_domain,
             )
         except Exception as err:  # noqa: BLE001
+            # pydaikin/aiohttp/asyncio can raise errors that aren't DaikinException
+            # (TimeoutError, connection resets, ...); treat those as transient too so
+            # a single unexpected error type doesn't crash the coordinator update.
             return self._handle_poll_communication_error(
                 err,
                 now=now,
@@ -706,6 +718,54 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         data = parse_daikin_list(raw_data)
         return calculate_energy_sum(data)
 
+    def _history_sync_window(
+        self,
+        *,
+        days_ago: int,
+        history_skip_extra_hours: int | None,
+        history_hours_to_correct: int | None,
+    ) -> tuple[dict[date, set[int]], list[int], int]:
+        """Compute the hourly correction window shared by both history sync methods.
+
+        Returns ``(recent_hours_by_date, days_to_sync, hours_to_correct)``.
+        ``recent_hours_by_date`` is empty when there is nothing to correct right now;
+        callers should log their own context-specific message and return in that case.
+        """
+        skip_hours, hours_to_correct, window_clamp = (
+            _history_window_from_entry_and_overrides(
+                self.config_entry.options,
+                history_skip_extra_hours=history_skip_extra_hours,
+                history_hours_to_correct=history_hours_to_correct,
+            )
+        )
+        # Inject only the last few completed local hours (skip current + previous).
+        # This avoids trying to correct hours/whole days that the recorder has
+        # not compiled yet (common right after local midnight).
+        recent_hours_by_date = _recent_completed_hours_by_local_date(
+            include_extra_hour=self._history_backfill_extra_hour,
+            skip_hours=skip_hours,
+            hours_to_correct=hours_to_correct,
+            clamp=window_clamp,
+        )
+        if not recent_hours_by_date:
+            return recent_hours_by_date, [], hours_to_correct
+
+        today_start = dt_util.start_of_local_day()
+        today_date = today_start.date()
+        yesterday_date = (today_start - timedelta(days=1)).date()
+
+        days_to_sync: list[int] = []
+        if today_date in recent_hours_by_date:
+            days_to_sync.append(0)
+        if yesterday_date in recent_hours_by_date:
+            days_to_sync.append(1)
+        if not days_to_sync:
+            # Fallback to the previous behavior if, for some reason,
+            # we couldn't compute the target day offsets.
+            days_to_sync = [0] if days_ago == 0 else [0, 1]
+
+        return recent_hours_by_date, days_to_sync, hours_to_correct
+
     async def async_sync_history(
         self,
         days_ago: int = 0,
@@ -748,21 +808,12 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         )
 
         async with self._history_sync_lock:
-            skip_hours, hours_to_correct, window_clamp = (
-                _history_window_from_entry_and_overrides(
-                    self.config_entry.options,
+            recent_hours_by_date, days_to_sync, hours_to_correct = (
+                self._history_sync_window(
+                    days_ago=days_ago,
                     history_skip_extra_hours=history_skip_extra_hours,
                     history_hours_to_correct=history_hours_to_correct,
                 )
-            )
-            # Inject only the last 3 completed local hours (skip current + previous).
-            # This avoids trying to correct hours/whole days that the recorder has
-            # not compiled yet (common right after local midnight).
-            recent_hours_by_date = _recent_completed_hours_by_local_date(
-                include_extra_hour=self._history_backfill_extra_hour,
-                skip_hours=skip_hours,
-                hours_to_correct=hours_to_correct,
-                clamp=window_clamp,
             )
             if not recent_hours_by_date:
                 _LOGGER.debug(
@@ -774,26 +825,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 )
                 return
 
-            today_start = dt_util.start_of_local_day()
-            today_date = today_start.date()
-            yesterday_date = (today_start - timedelta(days=1)).date()
-
-            days_to_sync: list[int] = []
             did_import_any = False
-            if today_date in recent_hours_by_date:
-                days_to_sync.append(0)
-            if yesterday_date in recent_hours_by_date:
-                days_to_sync.append(1)
-            if not days_to_sync:
-                # Fallback to the previous behavior if, for some reason,
-                # we couldn't compute the target day offsets.
-                days_to_sync = [0] if days_ago == 0 else [0, 1]
-
-            def _normalize_24(values: list[int]) -> list[int]:
-                values = values[:24]
-                if len(values) < 24:
-                    values += [0] * (24 - len(values))
-                return values
 
             # Import from older to newer days so that rebasing using the
             # previously existing (or just-injected) `sum` boundary works.
@@ -842,15 +874,15 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                         "Energy missing for %s, calculating from cool/heat",
                         self.name,
                     )
-                    cool_list = _normalize_24(cool_list)
-                    heat_list = _normalize_24(heat_list)
+                    cool_list = _normalize_24_hours(cool_list)
+                    heat_list = _normalize_24_hours(heat_list)
                     normal_list = [c + h for c, h in zip(cool_list, heat_list)]
                     normal_available = True
 
                 # Normalize to 24 hourly deltas so all days compile consistently.
-                normal_list = _normalize_24(normal_list) if normal_available else []
-                cool_list = _normalize_24(cool_list) if cool_available else []
-                heat_list = _normalize_24(heat_list) if heat_available else []
+                normal_list = _normalize_24_hours(normal_list) if normal_available else []
+                cool_list = _normalize_24_hours(cool_list) if cool_available else []
+                heat_list = _normalize_24_hours(heat_list) if heat_available else []
 
                 _LOGGER.debug(
                     "Data for %s (days_ago=%s): normal=%s, cool=%s, heat=%s",
@@ -940,19 +972,12 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         )
 
         async with self._history_sync_lock:
-            skip_hours, hours_to_correct, window_clamp = (
-                _history_window_from_entry_and_overrides(
-                    self.config_entry.options,
+            recent_hours_by_date, days_to_sync, hours_to_correct = (
+                self._history_sync_window(
+                    days_ago=days_ago,
                     history_skip_extra_hours=history_skip_extra_hours,
                     history_hours_to_correct=history_hours_to_correct,
                 )
-            )
-            # Inject only the last 3 completed local hours (skip current + previous).
-            recent_hours_by_date = _recent_completed_hours_by_local_date(
-                include_extra_hour=self._history_backfill_extra_hour,
-                skip_hours=skip_hours,
-                hours_to_correct=hours_to_correct,
-                clamp=window_clamp,
             )
             if not recent_hours_by_date:
                 _LOGGER.debug(
@@ -964,24 +989,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 )
                 return
 
-            today_start = dt_util.start_of_local_day()
-            today_date = today_start.date()
-            yesterday_date = (today_start - timedelta(days=1)).date()
-
-            days_to_sync: list[int] = []
             did_import_any = False
-            if today_date in recent_hours_by_date:
-                days_to_sync.append(0)
-            if yesterday_date in recent_hours_by_date:
-                days_to_sync.append(1)
-            if not days_to_sync:
-                days_to_sync = [0] if days_ago == 0 else [0, 1]
-
-            def _normalize_24(values: list[int]) -> list[int]:
-                values = values[:24]
-                if len(values) < 24:
-                    values += [0] * (24 - len(values))
-                return values
 
             def _aggregate_all_devices_cool_heat(
                 target_days_ago: int,
@@ -1029,8 +1037,8 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                     if not cool_list and not heat_list:
                         continue
 
-                    cool_list = _normalize_24(cool_list)
-                    heat_list = _normalize_24(heat_list)
+                    cool_list = _normalize_24_hours(cool_list)
+                    heat_list = _normalize_24_hours(heat_list)
                     aggregate = [
                         agg + c + h for agg, c, h in zip(aggregate, cool_list, heat_list)
                     ]
@@ -1174,7 +1182,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                     self.name,
                     target_days_ago,
                 )
-                total_list = _normalize_24(total_list)
+                total_list = _normalize_24_hours(total_list)
 
                 ent_reg = er.async_get(self.hass)
                 unique_id = f"{self.device.mac}-{ATTR_TOTAL_ENERGY_TODAY}"

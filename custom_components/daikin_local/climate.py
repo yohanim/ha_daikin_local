@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Any, ClassVar
 
 from homeassistant.components.climate import (
@@ -32,6 +32,7 @@ from .const import (
     ATTR_STATE_OFF,
     ATTR_STATE_ON,
     ATTR_TARGET_TEMPERATURE,
+    DAIKIN_ATTR_ADVANCED,
     DOMAIN,
     ZONE_NAME_UNCONFIGURED,
 )
@@ -91,7 +92,6 @@ HA_ATTR_TO_DAIKIN = {
     ATTR_TARGET_TEMPERATURE: "stemp",
 }
 
-DAIKIN_ATTR_ADVANCED = "adv"
 ZONE_TEMPERATURE_WINDOW = 2
 
 
@@ -157,6 +157,24 @@ def _zone_temperature_from_list(values: list[str], zone_id: int) -> float | None
         return float(values[zone_id])
     except (TypeError, ValueError):
         return None
+
+
+def _hvac_mode_from_daikin(daikin_mode: str | None) -> HVACMode:
+    """Map a raw Daikin mode string to an HVACMode.
+
+    Falls back to HEAT_COOL for unrecognized values (shared by the main climate
+    entity and the zone climate entity, which mirror the same underlying mode).
+    """
+    key = daikin_mode.lower() if daikin_mode else None
+    mode = DAIKIN_TO_HA_STATE.get(key) if key is not None else None
+    if mode is None:
+        if key is not None:
+            _LOGGER.debug(
+                "[climate] Unrecognized Daikin HVAC mode %r; defaulting to heat_cool",
+                daikin_mode,
+            )
+        mode = HVACMode.HEAT_COOL
+    return mode
 
 
 async def async_setup_entry(
@@ -256,10 +274,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
                     )
 
         if values:
-            async with self.coordinator.pydaikin_communication_lock:
-                await self.device.set(values)
-            self.async_write_ha_state()
-            await self.coordinator.async_refresh()
+            await self._async_execute_command(lambda: self.device.set(values))
 
     @property
     def current_temperature(self) -> float | None:
@@ -307,9 +322,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
         if self.device.values.get("pow") != "1":
             return HVACMode.OFF
         daikin_mode = self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_HVAC_MODE])[1]
-        return DAIKIN_TO_HA_STATE.get(
-            daikin_mode.lower() if daikin_mode else None, HVACMode.HEAT_COOL
-        )
+        return _hvac_mode_from_daikin(daikin_mode)
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set HVAC mode."""
@@ -365,35 +378,35 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set preset mode."""
-        lock = self.coordinator.pydaikin_communication_lock
+        command: Callable[[], Awaitable[None]] | None = None
         if preset_mode == PRESET_AWAY:
-            async with lock:
-                await self.device.set_holiday(ATTR_STATE_ON)
+            command = lambda: self.device.set_holiday(ATTR_STATE_ON)
         elif preset_mode == PRESET_BOOST:
-            async with lock:
-                await self.device.set_advanced_mode(
-                    HA_PRESET_TO_DAIKIN[PRESET_BOOST], ATTR_STATE_ON
-                )
+            command = lambda: self.device.set_advanced_mode(
+                HA_PRESET_TO_DAIKIN[PRESET_BOOST], ATTR_STATE_ON
+            )
         elif preset_mode == PRESET_ECO:
-            async with lock:
-                await self.device.set_advanced_mode(
-                    HA_PRESET_TO_DAIKIN[PRESET_ECO], ATTR_STATE_ON
-                )
+            command = lambda: self.device.set_advanced_mode(
+                HA_PRESET_TO_DAIKIN[PRESET_ECO], ATTR_STATE_ON
+            )
         elif self.preset_mode == PRESET_AWAY:
-            async with lock:
-                await self.device.set_holiday(ATTR_STATE_OFF)
+            command = lambda: self.device.set_holiday(ATTR_STATE_OFF)
         elif self.preset_mode == PRESET_BOOST:
-            async with lock:
-                await self.device.set_advanced_mode(
-                    HA_PRESET_TO_DAIKIN[PRESET_BOOST], ATTR_STATE_OFF
-                )
+            command = lambda: self.device.set_advanced_mode(
+                HA_PRESET_TO_DAIKIN[PRESET_BOOST], ATTR_STATE_OFF
+            )
         elif self.preset_mode == PRESET_ECO:
-            async with lock:
-                await self.device.set_advanced_mode(
-                    HA_PRESET_TO_DAIKIN[PRESET_ECO], ATTR_STATE_OFF
-                )
-        self.async_write_ha_state()
-        await self.coordinator.async_refresh()
+            command = lambda: self.device.set_advanced_mode(
+                HA_PRESET_TO_DAIKIN[PRESET_ECO], ATTR_STATE_OFF
+            )
+
+        if command is not None:
+            await self._async_execute_command(command)
+        else:
+            # No preset transition matched (e.g. already PRESET_NONE): still
+            # refresh, matching the previous unconditional behavior.
+            self.async_write_ha_state()
+            await self.coordinator.async_refresh()
 
     @property
     def preset_modes(self) -> list[str]:
@@ -412,17 +425,11 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
 
     async def async_turn_on(self) -> None:
         """Turn device on."""
-        async with self.coordinator.pydaikin_communication_lock:
-            await self.device.set({"pow": "1"})
-        self.async_write_ha_state()
-        await self.coordinator.async_refresh()
+        await self._async_execute_command(lambda: self.device.set({"pow": "1"}))
 
     async def async_turn_off(self) -> None:
         """Turn device off."""
-        async with self.coordinator.pydaikin_communication_lock:
-            await self.device.set({"pow": "0"})
-        self.async_write_ha_state()
-        await self.coordinator.async_refresh()
+        await self._async_execute_command(lambda: self.device.set({"pow": "0"}))
 
 
 class DaikinZoneClimate(DaikinEntity, ClimateEntity):
@@ -456,9 +463,7 @@ class DaikinZoneClimate(DaikinEntity, ClimateEntity):
         if self.device.values.get("pow") != "1":
             return HVACMode.OFF
         daikin_mode = self.device.represent(HA_ATTR_TO_DAIKIN[ATTR_HVAC_MODE])[1]
-        return DAIKIN_TO_HA_STATE.get(
-            daikin_mode.lower() if daikin_mode else None, HVACMode.HEAT_COOL
-        )
+        return _hvac_mode_from_daikin(daikin_mode)
 
     @property
     def hvac_action(self) -> HVACAction | None:
@@ -549,13 +554,11 @@ class DaikinZoneClimate(DaikinEntity, ClimateEntity):
 
         zone_value = str(round(temperature_value))
         try:
-            async with self.coordinator.pydaikin_communication_lock:
-                await self.device.set_zone(self._zone_id, zone_key, zone_value)
+            await self._async_execute_command(
+                lambda: self.device.set_zone(self._zone_id, zone_key, zone_value)
+            )
         except (AttributeError, KeyError, NotImplementedError, TypeError) as err:
             raise _zone_error("zone_set_failed") from err
-
-        self.async_write_ha_state()
-        await self.coordinator.async_refresh()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Disallow changing HVAC mode via zone climate."""

@@ -20,6 +20,9 @@ ATTR_HEAT_ENERGY = "heat_energy"
 ATTR_TOTAL_POWER = "total_power"
 ATTR_TOTAL_ENERGY_TODAY = "total_energy_today"
 
+# BRP069 Wi-Fi adapter signal strength (dBm); not available on BRP084.
+ATTR_WIFI_SIGNAL = "wifi_signal"
+
 ATTR_STATE_ON = "on"
 ATTR_STATE_OFF = "off"
 
@@ -63,6 +66,11 @@ CONF_HISTORY_SKIP_EXTRA_HOURS = "history_skip_extra_hours"
 CONF_HISTORY_HOURS_TO_CORRECT = "history_hours_to_correct"
 # Auto history only: skip sync during the first N local clock minutes of each hour (0 = off).
 CONF_HISTORY_AUTO_SYNC_GRACE_MINUTES = "history_auto_sync_grace_minutes"
+
+# pydaikin "advanced mode" flags key (holds streamer/econo/powerful markers as a
+# space-separated string); shared between climate.py (preset mode) and switch.py
+# (streamer toggle) so it is only defined once.
+DAIKIN_ATTR_ADVANCED = "adv"
 
 ZONE_NAME_UNCONFIGURED = "-"
 

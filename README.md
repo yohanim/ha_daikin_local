@@ -18,11 +18,17 @@ A custom integration for Home Assistant to locally control Daikin air conditione
 - **Clear default entity IDs**: For **new** devices and **new** installations, `suggested_object_id` is only the **suffix** (sensor key, `hvac`, `zone_N`, …). Home Assistant then builds `sensor.<device_slug>_<suffix>` (e.g. `sensor.salon_humidity`), so the device name is **not** duplicated in the `entity_id`.
 - **Advanced Functions**: Support for Streamer mode, Powerful (Boost), and Econo modes.
 - **Demand Control** (BRP069, protocol v3+ only, requires `pydaikin>=2.19.0`): a `Demand control` switch and a `Demand control max power` number entity (both disabled by default in the entity registry) toggle the feature and set the max power percentage from the dashboard; the `daikin_local.set_demand_control` service also covers max power plus the mode (manual / scheduled / auto).
+  - `pydaikin>=2.19.1` fixes a key collision where the demand control mode overwrote the climate entity's HVAC mode internally (both were stored as `mode`); it is now kept separately as `dmd_mode`. No action needed beyond the version bump.
 - **BRP084 support** (firmware 2.8.0, requires `pydaikin>=2.19.0`): the integration auto-detects the device via the same discovery/config flow as BRP069.
   - Switches for `Comfort airflow`, `Econo`, `Outdoor unit quiet`, and `Powerful` (BRP084 exposes these outside the generic advanced-mode mechanism used by BRP069, so they are separate toggles rather than climate presets).
   - `Outdoor compressor temperature` sensor (disabled by default).
   - `daikin_local.set_brp084_options` service for the vertical vane position (`off` / `down` / `swing`) and the dry-mode comfort offset (-3.0 to 0.0°C).
   - Outdoor/compressor sub-zero temperature readings are also fixed by the `pydaikin>=2.19.0` bump (previously decoded incorrectly on this firmware).
+  - `pydaikin>=2.20.0` makes `find_value_by_pn` tolerate `pc` nodes without a `pn` attribute, avoiding spurious errors on some BRP084 responses.
+- **BRP069 adapter extras** (require `pydaikin>=2.20.0`):
+  - `Adapter LED` switch to turn the Wi-Fi adapter's status LED on/off (disabled by default; only shown when the adapter reports a `led` field, i.e. BRP069A/B/C).
+  - `Wi-Fi signal strength` sensor in dBm (disabled by default).
+  - The adapter's internal clock is now self-healed: if it reports as unsynced (e.g. adapters not linked to the Daikin cloud, `method=home only`), the integration pushes the current UTC time to it automatically, which previously could leave energy sensors unavailable (`ret=NG (time is not sync)`).
 - **Instant Feedback**: State updates immediately in the UI after any setting change (no more waiting for the 30s refresh cycle).
 - **Polling**:
   - Default: recurring updates use pydaikin’s `update_status()` (per device class; for BRP069 with energy this typically means `get_sensor_info`, `get_control_info`, `get_day_power_ex`, `get_week_power` — not the full init resource list, so e.g. year aggregates are not fetched on every poll).

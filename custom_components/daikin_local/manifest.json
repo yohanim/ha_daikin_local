@@ -9,7 +9,7 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/yohanim/ha_daikin_local/issues",
   "loggers": ["pydaikin"],
-  "requirements": ["pydaikin==2.19.0"],
-  "version": "1.7.1",
+  "requirements": ["pydaikin==2.20.0"],
+  "version": "1.8.0",
   "zeroconf": ["_dkapi._tcp.local."]
 }

@@ -364,14 +364,16 @@ async def async_migrate_unique_id(
                 name=new_name,
             )
 
-        # Migrate entities
-        await er.async_migrate_entries(hass, config_entry.entry_id, _update_unique_id)
+    # Migrate entities and the config entry itself once per entry, not once per
+    # device entry (there is normally exactly one, but this loop previously
+    # repeated both calls for each extra device row it might find).
+    await er.async_migrate_entries(hass, config_entry.entry_id, _update_unique_id)
 
-        new_data = {**config_entry.data, KEY_MAC: dr.format_mac(new_unique_id)}
+    new_data = {**config_entry.data, KEY_MAC: dr.format_mac(new_unique_id)}
 
-        hass.config_entries.async_update_entry(
-            config_entry, unique_id=new_unique_id, data=new_data
-        )
+    hass.config_entries.async_update_entry(
+        config_entry, unique_id=new_unique_id, data=new_data
+    )
 
 
 @callback

@@ -16,6 +16,7 @@ from homeassistant.const import (
     UnitOfFrequency,
     UnitOfPower,
     UnitOfRatio,
+    UnitOfSignalStrength,
     UnitOfTemperature,
     UnitOfTime,
 )
@@ -35,6 +36,7 @@ from .const import (
     ATTR_TARGET_HUMIDITY,
     ATTR_TOTAL_ENERGY_TODAY,
     ATTR_TOTAL_POWER,
+    ATTR_WIFI_SIGNAL,
 )
 from .coordinator import DaikinConfigEntry, DaikinCoordinator, DaikinData
 from .entity import DaikinEntity
@@ -159,6 +161,15 @@ SENSOR_TYPES: tuple[DaikinSensorEntityDescription, ...] = (
         entity_registry_enabled_default=False,
         value_func=lambda data: data.appliance.compressor_temperature,
     ),
+    DaikinSensorEntityDescription(
+        key=ATTR_WIFI_SIGNAL,
+        translation_key="wifi_signal",
+        device_class=SensorDeviceClass.SIGNAL_STRENGTH,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfSignalStrength.DECIBELS_MILLIWATT,
+        entity_registry_enabled_default=False,
+        value_func=lambda data: data.appliance.wifi_signal,
+    ),
 )
 
 DIAGNOSTIC_SENSOR_TYPES: tuple[DaikinDiagnosticSensorEntityDescription, ...] = (
@@ -257,6 +268,12 @@ async def async_setup_entry(
         elif description.key == ATTR_COMPRESSOR_TEMPERATURE:
             # BRP084-only; not defined on the base Appliance/BRP069 classes.
             supported = getattr(device, "support_compressor_temperature", False)
+        elif description.key == ATTR_WIFI_SIGNAL:
+            # BRP069-only (radio1 field of common/basic_info); no explicit
+            # support flag, so check the cached value directly.
+            supported = isinstance(device, DaikinBRP069) and (
+                device.values.get("radio1", invalidate=False) is not None
+            )
 
         if supported:
             entities.append(DaikinSensor(coordinator, description))
