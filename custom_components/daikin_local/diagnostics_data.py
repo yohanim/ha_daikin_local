@@ -8,6 +8,7 @@ from typing import Any
 
 from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import (
@@ -17,7 +18,6 @@ from homeassistant.helpers.device_registry import (
 
 from .const import (
     CONF_ENERGY_GROUP_ID,
-    CONF_HOST,
     KEY_IS_BRP069,
     KEY_MAC,
     KEY_SUPPORTS_ENERGY,

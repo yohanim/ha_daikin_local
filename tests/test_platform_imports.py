@@ -27,6 +27,8 @@ PLATFORM_MODULES = (
     "custom_components.daikin_local.entity",
     "custom_components.daikin_local.coordinator",
     "custom_components.daikin_local.config_flow",
+    "custom_components.daikin_local.diagnostics",
+    "custom_components.daikin_local.diagnostics_data",
     "custom_components.daikin_local.services",
     "custom_components.daikin_local.climate",
     "custom_components.daikin_local.number",

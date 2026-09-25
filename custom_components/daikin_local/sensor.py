@@ -12,11 +12,11 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import (
+    PERCENTAGE,
     SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
     UnitOfEnergy,
     UnitOfFrequency,
     UnitOfPower,
-    UnitOfRatio,
     UnitOfTemperature,
     UnitOfTime,
 )
@@ -86,7 +86,7 @@ SENSOR_TYPES: tuple[DaikinSensorEntityDescription, ...] = (
         translation_key="humidity",
         device_class=SensorDeviceClass.HUMIDITY,
         state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=UnitOfRatio.PERCENTAGE,
+        native_unit_of_measurement=PERCENTAGE,
         value_func=lambda data: data.appliance.humidity,
     ),
     DaikinSensorEntityDescription(
@@ -94,7 +94,7 @@ SENSOR_TYPES: tuple[DaikinSensorEntityDescription, ...] = (
         translation_key="target_humidity",
         device_class=SensorDeviceClass.HUMIDITY,
         state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=UnitOfRatio.PERCENTAGE,
+        native_unit_of_measurement=PERCENTAGE,
         value_func=lambda data: getattr(data.appliance, "target_humidity", None),
     ),
     DaikinSensorEntityDescription(
