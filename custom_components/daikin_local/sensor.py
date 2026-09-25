@@ -12,11 +12,11 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import (
+    SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
     UnitOfEnergy,
     UnitOfFrequency,
     UnitOfPower,
     UnitOfRatio,
-    UnitOfSignalStrength,
     UnitOfTemperature,
     UnitOfTime,
 )
@@ -166,7 +166,7 @@ SENSOR_TYPES: tuple[DaikinSensorEntityDescription, ...] = (
         translation_key="wifi_signal",
         device_class=SensorDeviceClass.SIGNAL_STRENGTH,
         state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=UnitOfSignalStrength.DECIBELS_MILLIWATT,
+        native_unit_of_measurement=SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
         entity_registry_enabled_default=False,
         value_func=lambda data: data.appliance.wifi_signal,
     ),
