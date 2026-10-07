@@ -182,6 +182,17 @@ Take a **backup** before renaming many entities at once.
 
 This integration uses the `pydaikin` library to communicate with the devices. It is optimized to be fully asynchronous to ensure it never blocks the main Home Assistant process.
 
+### Running the validations locally
+
+On Windows 11 with [WSL Containers](https://learn.microsoft.com/windows/wsl/) (`wslc`), run the same checks as CI (hassfest and the full pytest suite with the Home Assistant harness) in throwaway Linux containers:
+
+```powershell
+./scripts/validate-local.ps1                 # hassfest + tests
+./scripts/validate-local.ps1 -Only hassfest  # or -Only tests
+```
+
+Without containers, the tests that do not need Home Assistant run in a local venv: `pip install -r requirements_local_tests.txt pytest`, then `pytest -m "not requires_ha"`.
+
 ### Why Daikin Local?
 Unlike the official integration which can sometimes be limited or hardware-dependent, this version was designed to provide better responsiveness and extended support for specific features like zones and advanced modes.
 
