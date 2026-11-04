@@ -184,6 +184,21 @@ def should_serve_cached_poll_data(
     return has_cached_data and consecutive_failures <= max_transient_failures
 
 
+# Raise the "device unreachable" repair issue once polls have failed without a
+# single success for this long (transient Wi-Fi drops stay silent).
+UNREACHABLE_ISSUE_AFTER = timedelta(minutes=30)
+
+
+def unreachable_issue_due(
+    failing_since: datetime | None,
+    now: datetime,
+    *,
+    threshold: timedelta = UNREACHABLE_ISSUE_AFTER,
+) -> bool:
+    """True when polls have been failing continuously for at least ``threshold``."""
+    return failing_since is not None and now - failing_since >= threshold
+
+
 def brp069_poll_failure_log_domain(
     *, is_brp069: bool, poll_domain: str | None
 ) -> str:

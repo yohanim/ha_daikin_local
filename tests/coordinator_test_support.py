@@ -67,6 +67,22 @@ def install_ha_stubs_for_coordinator() -> None:
     """Register minimal ``homeassistant`` modules required by ``coordinator.py``."""
     if "homeassistant.helpers.update_coordinator" in sys.modules:
         return
+    # Real Home Assistant installed (full harness run): never shadow it with stubs.
+    # The harness does not necessarily preload update_coordinator (2026.10+ does
+    # not), so a sys.modules check alone is not enough.
+    current = sys.modules.get("homeassistant")
+    stubbed_already = current is not None and not getattr(current, "__file__", None)
+    if not stubbed_already:
+        before = set(sys.modules)
+        try:
+            importlib.import_module("homeassistant.helpers.update_coordinator")
+        except ImportError:
+            # Not installed (or unusable): drop half-imported modules, then stub.
+            for name in set(sys.modules) - before:
+                if name == "homeassistant" or name.startswith("homeassistant."):
+                    del sys.modules[name]
+        else:
+            return
 
     ha = types.ModuleType("homeassistant")
     ha.__path__ = []
@@ -80,6 +96,7 @@ def install_ha_stubs_for_coordinator() -> None:
         "homeassistant.components.recorder",
         "homeassistant.helpers",
         "homeassistant.helpers.entity_registry",
+        "homeassistant.helpers.issue_registry",
         "homeassistant.helpers.storage",
         "homeassistant.helpers.update_coordinator",
         "homeassistant.util",
@@ -129,6 +146,22 @@ def install_ha_stubs_for_coordinator() -> None:
 
     const_mod = sys.modules["homeassistant.const"]
     const_mod.UnitOfEnergy = type("UnitOfEnergy", (), {"KILO_WATT_HOUR": "kWh"})
+    const_mod.CONF_HOST = "host"
+
+    # issue_registry: record calls in ``ir.calls`` so tests can assert on them.
+    ir_mod = sys.modules["homeassistant.helpers.issue_registry"]
+    ir_mod.calls = []
+    ir_mod.IssueSeverity = type("IssueSeverity", (), {"WARNING": "warning"})
+
+    def _async_create_issue(hass: Any, domain: str, issue_id: str, **kwargs: Any) -> None:
+        ir_mod.calls.append(("create", domain, issue_id, kwargs))
+
+    def _async_delete_issue(hass: Any, domain: str, issue_id: str) -> None:
+        ir_mod.calls.append(("delete", domain, issue_id))
+
+    ir_mod.async_create_issue = _async_create_issue
+    ir_mod.async_delete_issue = _async_delete_issue
+    sys.modules["homeassistant.helpers"].issue_registry = ir_mod
 
     dt_mod = sys.modules["homeassistant.util.dt"]
     dt_mod.utcnow = lambda: datetime.now(UTC)

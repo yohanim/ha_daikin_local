@@ -32,6 +32,7 @@ from .const import (
     TIMEOUT_SEC,
 )
 from .coordinator import DaikinConfigEntry, DaikinCoordinator
+from .issues import async_delete_unreachable_issue
 from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
@@ -230,6 +231,9 @@ async def update_listener(hass: HomeAssistant, entry: DaikinConfigEntry) -> None
 
 async def async_unload_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bool:
     """Unload a config entry."""
+    # HA 2026.11+ also drops the issue with the entry; older cores need this
+    # (a reload re-raises it if the unit is still unreachable).
+    async_delete_unreachable_issue(hass, entry.entry_id)
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
@@ -316,7 +320,7 @@ async def async_migrate_unique_id(
     )
 
     # Remove duplicated device
-    if duplicate is not None and config_entry.entry_id in duplicate.config_entries:
+    if duplicate is not None and duplicate.config_entry_id == config_entry.entry_id:
         _LOGGER.debug(
             "Removing duplicated device %s",
             duplicate.name,

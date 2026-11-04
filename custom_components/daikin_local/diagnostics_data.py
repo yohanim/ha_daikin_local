@@ -128,7 +128,7 @@ async def async_get_device_diagnostics(
     hass: HomeAssistant, entry: ConfigEntry, device: DeviceEntry
 ) -> dict[str, Any]:
     """Return diagnostics for a single device (Device page → Download diagnostics)."""
-    if entry.entry_id not in device.config_entries:
+    if device.config_entry_id != entry.entry_id:
         return {
             "error": "This device is not linked to the selected config entry.",
         }

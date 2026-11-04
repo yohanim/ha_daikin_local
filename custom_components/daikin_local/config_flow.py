@@ -8,6 +8,7 @@ from typing import Any
 
 import voluptuous as vol
 from aiohttp import ClientError
+from homeassistant import data_entry_flow
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
@@ -46,6 +47,18 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _optional_visible(key: str, *, default: Any, visible: dict[str, Any]) -> Any:
+    """Optional schema marker shown only while ``visible`` matches (HA 2026.11+).
+
+    Older cores have no ``visible`` support: fall back to a plain, always-shown
+    ``vol.Optional`` so the options form keeps working there.
+    """
+    try:
+        return data_entry_flow.Optional(key, default=default, visible=visible)
+    except (AttributeError, TypeError):
+        return vol.Optional(key, default=default)
 
 
 class FlowHandler(ConfigFlow, domain=DOMAIN):
@@ -283,7 +296,8 @@ class OptionsFlowHandler(OptionsFlow):
     ) -> ConfigFlowResult:
         """Manage the options."""
         if user_input is not None:
-            # Merge so we only manage auto_history_sync here; do not wipe other keys.
+            # Merge so keys absent from user_input (including fields hidden by a
+            # `visible` condition) keep their stored value instead of being wiped.
             merged = {**self.config_entry.options, **user_input}
             return self.async_create_entry(title="", data=merged)
 
@@ -325,8 +339,11 @@ class OptionsFlowHandler(OptionsFlow):
             vol.Optional(CONF_CONNECTION_TIMEOUT, default=TIMEOUT_SEC): int,
             vol.Optional(CONF_POLL_INTERVAL_SEC, default=TIMEOUT_SEC): int,
             vol.Optional(CONF_ENERGY_GROUP_ID, default=""): str,
-            vol.Optional(
-                CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER, default=False
+            # Only meaningful once the entry belongs to an energy group.
+            _optional_visible(
+                CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER,
+                default=False,
+                visible={"field": CONF_ENERGY_GROUP_ID, "operator": "exists"},
             ): cv.boolean,
         }
         if show_domain_polling:
@@ -397,9 +414,13 @@ class OptionsFlowHandler(OptionsFlow):
                         "unit_of_measurement": "h",
                     }
                 ),
-                vol.Optional(
+                # Auto history only: hidden while auto_history_sync is off. Hidden
+                # fields are left out of user_input, so the merge on submit keeps the
+                # previously stored value.
+                _optional_visible(
                     CONF_HISTORY_AUTO_SYNC_GRACE_MINUTES,
                     default=0,
+                    visible={"field": CONF_AUTO_HISTORY_SYNC, "value": True},
                 ): selector.NumberSelector(
                     {
                         "min": 0,

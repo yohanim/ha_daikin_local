@@ -9,9 +9,11 @@
 # (e.g. lru-dict) and require "Microsoft C++ Build Tools". In that case either
 # install the build tools, use WSL, or run the same pip+pytest in GitHub Actions.
 #
-# Pin tracks homeassistant used by pytest-homeassistant-custom-component; bump
-# when you bump hacs.json / Core target (see PyPI release notes for the package).
-pytest-homeassistant-custom-component==0.13.320
+# "Pinned" harness: Home Assistant at the hacs.json floor (2026.10.0), so CI keeps
+# exercising the compatibility paths (legacy climate names, no `visible` fields,
+# repair issues without config_entry_id). Bump together with hacs.json.
+# See requirements_test_latest.txt for the "latest" harness run.
+pytest-homeassistant-custom-component==0.13.371  # homeassistant==2026.10.0
 
 # pytest 9 + async harness (explicit so the plugin is always available to the runner).
 pytest-asyncio>=1.3.0

@@ -71,6 +71,8 @@ def _make_brp069_coordinator(
     coordinator._brp069_last_energy_poll_mono = last_energy_poll_mono
     coordinator._consecutive_poll_failures = 0
     coordinator._poll_cooldown_until = None
+    coordinator._failing_since = None
+    coordinator._unreachable_issue_active = False
     coordinator._last_power = 0
     coordinator._total_power_enabled_cached = False
     coordinator._total_power_enabled_checked_mono = _NOW_MONO

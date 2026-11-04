@@ -2,6 +2,7 @@
   "domain": "daikin_local",
   "name": "Daikin Local",
   "after_dependencies": ["recorder"],
+  "categories": ["climate.heat_pumps_air_conditioning"],
   "codeowners": ["@yoh_anim"],
   "config_flow": true,
   "documentation": "https://github.com/yohanim/ha_daikin_local",
@@ -10,6 +11,6 @@
   "issue_tracker": "https://github.com/yohanim/ha_daikin_local/issues",
   "loggers": ["pydaikin"],
   "requirements": ["pydaikin>=2.20.0"],
-  "version": "1.8.1",
+  "version": "1.9.0",
   "zeroconf": ["_dkapi._tcp.local."]
 }

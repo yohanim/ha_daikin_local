@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta
 
 from homeassistant.components import recorder
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfEnergy
+from homeassistant.const import CONF_HOST, UnitOfEnergy
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
@@ -31,6 +31,7 @@ from .const import (
     CONF_INSERT_MISSING,
     DOMAIN,
 )
+from .issues import async_create_unreachable_issue, async_delete_unreachable_issue
 from .pure import (
     brp069_poll_failure_log_domain,
     connection_timeout_sec,
@@ -41,6 +42,7 @@ from .pure import (
     poll_error_translation_error,
     poll_failure_cooldown_seconds,
     should_serve_cached_poll_data,
+    unreachable_issue_due,
 )
 from .pure import (
     format_communication_error as _format_communication_error,
@@ -240,6 +242,10 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         self._daily_energy_poll_error_count: int = 0
         self._consecutive_poll_failures = 0
         self._poll_cooldown_until: datetime | None = None
+        # Start of the current run of failed polls (None while the unit answers) and
+        # whether the "device unreachable" repair issue is currently shown.
+        self._failing_since: datetime | None = None
+        self._unreachable_issue_active = False
         # When Daikin communication fails at an hourly boundary, we may miss
         # one "recent completed hour" worth of statistics injection.
         # Keep one extra hour in the next history sync attempt.
@@ -593,9 +599,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
                 brp069_poll_domain=brp069_poll_domain,
             )
 
-        # Successful poll: reset cooldown and consecutive failure state.
-        self._consecutive_poll_failures = 0
-        self._poll_cooldown_until = None
+        self._mark_poll_success()
 
         # Power estimation (pydaikin slope) can be noisy when total counters are inconsistent.
         # For BRP069, compute it only on energy refresh ticks and only if the entity is enabled.
@@ -651,6 +655,37 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
             await self._async_maybe_auto_history_sync(now_local)
         return data
 
+    def _mark_poll_success(self) -> None:
+        """Reset cooldown / failure state and clear the unreachable repair issue."""
+        self._consecutive_poll_failures = 0
+        self._poll_cooldown_until = None
+        self._failing_since = None
+        if self._unreachable_issue_active:
+            self._unreachable_issue_active = False
+            async_delete_unreachable_issue(self.hass, self.config_entry.entry_id)
+            _LOGGER.info("[coordinator] %s is reachable again", self.name)
+
+    def _maybe_raise_unreachable_issue(self, now: datetime) -> None:
+        """Show the repair issue once polls have failed long enough in a row."""
+        if self._failing_since is None:
+            self._failing_since = now
+        if self._unreachable_issue_active or not unreachable_issue_due(
+            self._failing_since, now
+        ):
+            return
+        self._unreachable_issue_active = True
+        async_create_unreachable_issue(
+            self.hass,
+            self.config_entry.entry_id,
+            name=str(self.name),
+            host=str(self.config_entry.data.get(CONF_HOST, "")),
+        )
+        _LOGGER.warning(
+            "[coordinator] %s unreachable since %s; repair issue raised",
+            self.name,
+            self._failing_since.isoformat(),
+        )
+
     def _handle_poll_communication_error(
         self,
         err: Exception,
@@ -680,6 +715,7 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         self._schedule_persist_error_stats()
         self._consecutive_poll_failures += 1
         # No explicit retry is scheduled here: polling already runs frequently.
+        self._maybe_raise_unreachable_issue(now)
 
         # For frequent polling, treat transient failures as "best effort":
         # - during the first few consecutive failures, return cached data

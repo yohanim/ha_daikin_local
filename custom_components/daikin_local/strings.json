@@ -2,8 +2,7 @@
   "config": {
     "abort": {
       "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
-      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
-      "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]"
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]"
     },
     "error": {
       "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
@@ -287,6 +286,12 @@
       "zone": {
         "name": "Zone"
       }
+    }
+  },
+  "issues": {
+    "device_unreachable": {
+      "title": "{name} is unreachable",
+      "description": "Home Assistant has not been able to reach the Daikin unit **{name}** at `{host}` for more than 30 minutes. Its entities stay unavailable until it answers again.\n\nCheck that the unit and its Wi-Fi adapter are powered and connected to your network. If its IP address changed, open the Daikin Local integration and choose **Reconfigure** to enter the new address.\n\nThis issue disappears on its own as soon as the unit responds."
     }
   },
   "exceptions": {

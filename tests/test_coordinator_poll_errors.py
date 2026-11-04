@@ -71,6 +71,12 @@ def _make_coordinator(
     coordinator._error_stats_date = None
     coordinator._schedule_persist_error_stats = lambda: None
     coordinator._ensure_error_stats_date = lambda: False
+    coordinator._failing_since = None
+    coordinator._unreachable_issue_active = False
+    coordinator.hass = SimpleNamespace()
+    coordinator.config_entry = SimpleNamespace(
+        entry_id="test-entry", data={"host": "192.0.2.10"}, options={}
+    )
     return coordinator
 
 

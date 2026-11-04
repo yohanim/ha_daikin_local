@@ -200,12 +200,49 @@ def format_target_temperature(target_temperature: float) -> str:
     return str(round(float(target_temperature) * 2, 0) / 2).rstrip("0").rstrip(".")
 
 
-class DaikinClimate(DaikinEntity, ClimateEntity):
+class _LegacyTemperatureApiMixin:
+    """Serve the climate temperature API under both its native and legacy names.
+
+    Home Assistant 2026.11 renamed the climate temperature members to
+    ``native_*`` (``native_temperature_unit``, ``native_current_temperature``,
+    ``native_target_temperature``); older cores only read the legacy names.
+    Entities implement the ``native_*`` members, this mixin exposes them under
+    the legacy names too. When a class provides both, 2026.11+ uses the native
+    ones and logs no deprecation, so the same code runs on every supported core.
+
+    Remove this mixin once ``hacs.json`` requires Home Assistant 2026.11+
+    (legacy names stop working in 2027.11).
+    """
+
+    _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+
+    @property
+    def native_current_temperature(self) -> float | None:
+        """Return the current temperature (none unless overridden)."""
+        return None
+
+    @property
+    def native_target_temperature(self) -> float | None:
+        """Return the target temperature (none unless overridden)."""
+        return None
+
+    @property
+    def current_temperature(self) -> float | None:
+        """Legacy alias of ``native_current_temperature`` (HA < 2026.11)."""
+        return self.native_current_temperature
+
+    @property
+    def target_temperature(self) -> float | None:
+        """Legacy alias of ``native_target_temperature`` (HA < 2026.11)."""
+        return self.native_target_temperature
+
+
+class DaikinClimate(DaikinEntity, _LegacyTemperatureApiMixin, ClimateEntity):
     """Representation of a Daikin HVAC."""
 
     _attr_name = None
     _attr_translation_key = "daikin"
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes: ClassVar[list[str]] = list(HA_STATE_TO_DAIKIN)
     _attr_target_temperature_step = 0.5
     _attr_fan_modes: list[str]
@@ -277,12 +314,12 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
             await self._async_execute_command(lambda: self.device.set(values))
 
     @property
-    def current_temperature(self) -> float | None:
+    def native_current_temperature(self) -> float | None:
         """Return the current temperature."""
         return self.device.inside_temperature
 
     @property
-    def target_temperature(self) -> float | None:
+    def native_target_temperature(self) -> float | None:
         """Return the temperature we try to reach."""
         return self.device.target_temperature
 
@@ -432,11 +469,10 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
         await self._async_execute_command(lambda: self.device.set({"pow": "0"}))
 
 
-class DaikinZoneClimate(DaikinEntity, ClimateEntity):
+class DaikinZoneClimate(DaikinEntity, _LegacyTemperatureApiMixin, ClimateEntity):
     """Representation of a Daikin zone temperature controller."""
 
     _attr_translation_key = "zone_climate"
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
     _attr_target_temperature_step = 0.5
 
@@ -471,7 +507,7 @@ class DaikinZoneClimate(DaikinEntity, ClimateEntity):
         return HA_STATE_TO_CURRENT_HVAC.get(self.hvac_mode)
 
     @property
-    def target_temperature(self) -> float | None:
+    def native_target_temperature(self) -> float | None:
         """Return the zone target temperature for the active mode."""
         heating, cooling = _zone_temperature_lists(self.device)
         mode = self.hvac_mode

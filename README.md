@@ -39,10 +39,14 @@ A custom integration for Home Assistant to locally control Daikin air conditione
 
 ## 🚀 Installation
 
-### Via HACS (Recommended)
+**Requires Home Assistant 2026.10 or newer** (stay on 1.8.x for older versions). On 2026.11+ the integration uses the native climate temperature API (no deprecation warnings) and the options form hides fields that do not apply (grace period without auto history sync, group master without an energy group); 2026.10 shows every field.
 
-1. Open HACS in Home Assistant.
-2. Click the three dots in the top right corner and choose **Custom repositories**.
+### Via the Marketplace (Recommended)
+
+Since Home Assistant 2026.11, HACS is built in as the **Marketplace**. Existing HACS installs are migrated automatically and keep receiving updates.
+
+1. Go to **Settings** > **Marketplace**.
+2. Open the menu in the top right corner and add a **custom repository** (requires connecting a GitHub account via device sign-in).
 3. Add the URL of this repository with the category **Integration**.
 4. Search for "Daikin Local" and click **Download**.
 5. Restart Home Assistant.
@@ -64,6 +68,10 @@ UI strings: `custom_components/daikin_local/strings.json` (English, required by 
 3. Search for **Daikin Local**.
 4. Enter the IP address of your Daikin unit, plus **connection timeout** (max time per HTTP request) and **update interval** (coordinator cadence when not using BRP069 state/energy split).
    - *Note: It is highly recommended to set a static IP for your AC unit via your router.*
+
+### Repair when a unit stops answering
+
+If a unit has not answered a single poll for **30 minutes**, a **"<name> is unreachable"** issue appears under **Settings → Repairs**, with the unit's IP address. Check power and Wi-Fi; if the IP changed, use **Reconfigure** on the integration. The issue **clears itself** as soon as the unit responds again (or when the entry is reloaded or removed). Short Wi-Fi drops stay silent.
 
 ### Using Daikin Local alongside Daikin Onecta (cloud)
 
@@ -143,6 +151,10 @@ So a **sharp cutoff** (e.g. “everything after 17:00 yesterday is gone for *eve
 
 Correlation in time with running `sync_history` does **not** prove causation: the same window often includes Core updates, backups, or purge jobs.
 
+### Cleaning up a bad import (Home Assistant 2026.11+)
+
+If a history correction wrote wrong values (for example a spike after an adapter reset), Home Assistant 2026.11 can **delete long-term statistics for a time range**: **Settings → Tools → Statistics**, pick the Daikin energy sensor, then delete only the affected hours. Take a backup first; deletion cannot be undone.
+
 ### Troubleshooting: “everything but Daikin disappeared from Energy”
 - Check **Settings → System → Recorder** (retention, purge, included/excluded entities).
 - Check **host disk space** and Core logs around the time the gap started.
@@ -184,12 +196,15 @@ This integration uses the `pydaikin` library to communicate with the devices. It
 
 ### Running the validations locally
 
-On Windows 11 with [WSL Containers](https://learn.microsoft.com/windows/wsl/) (`wslc`), run the same checks as CI (hassfest and the full pytest suite with the Home Assistant harness) in throwaway Linux containers:
+On Windows 11 with [WSL Containers](https://learn.microsoft.com/windows/wsl/) (`wslc`), run the same checks as CI (hassfest and the full pytest suite with the Home Assistant harness) in throwaway Linux containers. Like CI, the full suite runs twice: **pinned** (`requirements_test.txt`, Home Assistant at the `hacs.json` floor, exercising the compatibility code paths) and **latest** (`requirements_test_latest.txt`, newest harness, Core and pydaikin):
 
 ```powershell
-./scripts/validate-local.ps1                 # hassfest + tests
-./scripts/validate-local.ps1 -Only hassfest  # or -Only tests
+./scripts/validate-local.ps1                              # hassfest + tests (pinned and latest)
+./scripts/validate-local.ps1 -Only hassfest               # or -Only tests
+./scripts/validate-local.ps1 -Only tests -Harness latest  # or -Harness pinned
 ```
+
+When raising the `hacs.json` floor, bump the harness pin in `requirements_test.txt` to the release that pins that Core version.
 
 Without containers, the tests that do not need Home Assistant run in a local venv: `pip install -r requirements_local_tests.txt pytest`, then `pytest -m "not requires_ha"`.
 
