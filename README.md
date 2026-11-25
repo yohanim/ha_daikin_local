@@ -216,6 +216,8 @@ On Windows 11 with [WSL Containers](https://learn.microsoft.com/windows/wsl/) (`
 ./scripts/validate-local.ps1 -Only tests -Versions latest   # or -Versions minimum
 ```
 
+**Known CI failure until Home Assistant 2026.12:** hassfest checks custom integration requirements against the packages pinned by the latest stable Core, and Home Assistant 2026.11 pins `pydaikin==2.22.1`, so it rejects `pydaikin>=2.24.1`. This is expected: Home Assistant installs pydaikin 2.24.1 at startup and the integration works, and Core 2026.12 ships 2.24.1 ([home-assistant/core#193110](https://github.com/home-assistant/core/pull/193110)), which turns hassfest green again. All other jobs must pass.
+
 Without containers, the tests that do not need Home Assistant run in a local venv: `pip install -r requirements_local_tests.txt pytest`, then `pytest -m "not requires_ha"`.
 
 ### Why Daikin Local?
