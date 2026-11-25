@@ -40,6 +40,7 @@ from .const import (
 )
 from .coordinator import DaikinConfigEntry, DaikinCoordinator, DaikinData
 from .entity import DaikinEntity
+from .pure import target_humidity_supported
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -95,7 +96,8 @@ SENSOR_TYPES: tuple[DaikinSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.HUMIDITY,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=PERCENTAGE,
-        value_func=lambda data: getattr(data.appliance, "target_humidity", None),
+        # None (unknown) in modes without a humidity target (shum=0).
+        value_func=lambda data: data.appliance.target_humidity,
     ),
     DaikinSensorEntityDescription(
         key=ATTR_TOTAL_POWER,
@@ -259,10 +261,7 @@ async def async_setup_entry(
         elif description.key == ATTR_HUMIDITY:
             supported = device.support_humidity
         elif description.key == ATTR_TARGET_HUMIDITY:
-            supported = (
-                device.support_humidity
-                and getattr(device, "target_humidity", None) is not None
-            )
+            supported = target_humidity_supported(device)
         elif description.key == ATTR_COMPRESSOR_FREQUENCY:
             supported = device.support_compressor_frequency
         elif description.key == ATTR_COMPRESSOR_TEMPERATURE:

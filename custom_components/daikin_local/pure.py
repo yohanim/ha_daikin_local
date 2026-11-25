@@ -7,6 +7,7 @@ stays single-sourced.
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 import voluptuous as vol
@@ -221,6 +222,61 @@ def main_climate_temperature_limits(hvac_mode: str) -> tuple[float, float]:
         # 10 °C supports Daikin Leave Home anti-freeze setpoints.
         return 10.0, 30.0
     return 16.0, 32.0
+
+
+def format_target_temperature(value: float, step: float = 0.5) -> str:
+    """Daikin ``stemp`` for ``value`` rounded half up to ``step`` ("23.5", "24").
+
+    Rounding half up matches pydaikin's whole-degree fallback (23.5 -> 24).
+    Raises ``ValueError`` when ``value`` is not a number.
+    """
+    step_d = Decimal(str(step))
+    steps = (Decimal(str(float(value))) / step_d).quantize(
+        Decimal(1), rounding=ROUND_HALF_UP
+    )
+    return format((steps * step_d).normalize(), "f")
+
+
+def target_humidity_supported(device: Any) -> bool:
+    """True if the unit has a humidity target, whatever the current mode.
+
+    Since pydaikin 2.22.1 ``target_humidity`` is ``None`` while ``shum`` is 0
+    (modes without a humidity target), so testing the value at setup would
+    drop the entity depending on the mode the unit happened to be in.
+    ``support_target_humidity`` checks for the key instead.
+    """
+    return bool(device.support_humidity and device.support_target_humidity)
+
+
+# Restored state of pydaikin's adaptive setpoint step (BRP069/BRP072C, 2.23+).
+# pydaikin does not persist it; the status is only valid for the firmware it
+# was learned on (a "confirmed" status never heals by itself).
+STEP_STATUS_KEY = "target_temperature_step_status"
+STEP_STATUS_FIRMWARE_KEY = "firmware"
+_RESTORABLE_STEP_STATUSES = ("confirmed", "inferred")
+
+
+def step_status_extra_data(status: str, firmware: str | None) -> dict[str, Any]:
+    """Data stored with the climate entity's restore state."""
+    return {STEP_STATUS_KEY: status, STEP_STATUS_FIRMWARE_KEY: firmware}
+
+
+def restored_step_status(
+    saved: dict[str, Any] | None, firmware: str | None
+) -> str | None:
+    """Status to hand back to pydaikin, or None if it should be learned again.
+
+    Only a learned status ("confirmed" or "inferred") is restored, and only
+    when it was learned on the same adapter firmware.
+    """
+    if not saved or firmware is None:
+        return None
+    status = saved.get(STEP_STATUS_KEY)
+    if status not in _RESTORABLE_STEP_STATUSES:
+        return None
+    if saved.get(STEP_STATUS_FIRMWARE_KEY) != firmware:
+        return None
+    return status
 
 
 def build_service_schema(insert_missing_validator: Any) -> vol.Schema:

@@ -5,7 +5,11 @@ from collections.abc import Awaitable, Callable
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from pydaikin.exceptions import DaikinException
+from pydaikin.exceptions import (
+    DaikinCommandRejected,
+    DaikinException,
+    DaikinVerificationError,
+)
 
 from .const import DOMAIN
 from .coordinator import DaikinCoordinator
@@ -22,9 +26,30 @@ async def async_execute_daikin_command(
     polling — cannot hold the communication lock forever and starve subsequent polls.
     Timeouts and pydaikin errors are translated into ``HomeAssistantError`` so the UI
     shows a clear message instead of a raw exception.
+
+    Since pydaikin 2.22.1 a write the adapter answers with a non-OK ``ret`` raises
+    ``DaikinCommandRejected`` instead of passing silently, and a half-degree
+    setpoint that reads back differently raises ``DaikinVerificationError``. The
+    unit answered in both cases, so they get their own message rather than the
+    generic communication error.
     """
     try:
         await coordinator.async_execute_command(command)
+    except DaikinCommandRejected as err:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="command_rejected",
+            translation_placeholders={"ret": str(err.ret)},
+        ) from err
+    except DaikinVerificationError as err:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="setpoint_not_applied",
+            translation_placeholders={
+                "requested": str(err.requested),
+                "actual": str(err.actual),
+            },
+        ) from err
     except TimeoutError as err:
         raise HomeAssistantError(
             translation_domain=DOMAIN,

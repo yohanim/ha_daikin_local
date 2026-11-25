@@ -55,21 +55,19 @@ jobs:
       - name: Run Ruff
         run: ruff check .
 
-  # Full Home Assistant harness, twice:
-  # - pinned: Core at the hacs.json floor (compatibility code paths)
+  # Full Home Assistant harness (pytest-homeassistant), twice. Versions come
+  # from the repository metadata (scripts/test_requirements.py), never repeated:
+  # - minimum: Core at the hacs.json floor, manifest.json requirements at their
+  #   minimum (pydaikin>=X installed as pydaikin==X)
   # - latest: newest harness + Core + pydaikin (catches upstream breakage early;
   #   the weekly schedule above re-runs it even without pushes)
   test:
-    name: test (${{ matrix.harness }})
+    name: test (${{ matrix.versions }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - harness: pinned
-            requirements: requirements_test.txt
-          - harness: latest
-            requirements: requirements_test_latest.txt
+        versions: [minimum, latest]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -83,8 +81,10 @@ jobs:
         run: |
           python -m venv .venv
           .venv/bin/python -m pip install --upgrade pip
-          .venv/bin/python -m pip install -U -r ${{ matrix.requirements }}
-          .venv/bin/python -m pip show homeassistant pytest-homeassistant-custom-component pydaikin | grep -E "^(Name|Version)"
+          .venv/bin/python scripts/test_requirements.py ${{ matrix.versions }} > "$RUNNER_TEMP/requirements_versions.txt"
+          cat "$RUNNER_TEMP/requirements_versions.txt"
+          .venv/bin/python -m pip install -U -r requirements_test.txt -r "$RUNNER_TEMP/requirements_versions.txt"
+          .venv/bin/python -m pip show homeassistant pytest-homeassistant pydaikin | grep -E "^(Name|Version)"
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Run pytest

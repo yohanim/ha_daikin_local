@@ -30,7 +30,28 @@ def install_pydaikin_stubs() -> tuple[type[Exception], type, type]:
     class DaikinException(Exception):
         """Stub matching pydaikin API surface used by the coordinator."""
 
+    class DaikinUnsupportedError(DaikinException):
+        """Stub: adapter without a local API (pydaikin>=2.24.0)."""
+
+    class DaikinCommandRejected(DaikinException):
+        """Stub: write answered with a non-OK ``ret`` (pydaikin>=2.22.1)."""
+
+        def __init__(self, ret: str) -> None:
+            super().__init__(f"Daikin rejected the request: ret={ret}")
+            self.ret = ret
+
+    class DaikinVerificationError(DaikinException):
+        """Stub: accepted setpoint reads back differently (pydaikin>=2.23.0)."""
+
+        def __init__(self, requested: str, actual: str) -> None:
+            super().__init__(f"Daikin accepted stemp={requested} but reports {actual}")
+            self.requested = requested
+            self.actual = actual
+
     exc_mod.DaikinException = DaikinException
+    exc_mod.DaikinUnsupportedError = DaikinUnsupportedError
+    exc_mod.DaikinCommandRejected = DaikinCommandRejected
+    exc_mod.DaikinVerificationError = DaikinVerificationError
     sys.modules["pydaikin.exceptions"] = exc_mod
 
     base_mod = types.ModuleType("pydaikin.daikin_base")
@@ -215,6 +236,7 @@ def install_extra_stubs_for_init() -> None:
         if not hasattr(const_mod, "Platform"):
 
             class _Platform:
+                BINARY_SENSOR = "binary_sensor"
                 CLIMATE = "climate"
                 NUMBER = "number"
                 SENSOR = "sensor"
@@ -244,9 +266,6 @@ def install_extra_stubs_for_init() -> None:
     if "homeassistant.exceptions" not in sys.modules:
         exc_mod = types.ModuleType("homeassistant.exceptions")
 
-        class ConfigEntryNotReady(Exception):
-            pass
-
         class HomeAssistantError(Exception):
             def __init__(self, *args: Any, **kwargs: Any) -> None:
                 super().__init__(*args)
@@ -254,9 +273,16 @@ def install_extra_stubs_for_init() -> None:
                 self.translation_key = kwargs.get("translation_key")
                 self.translation_placeholders = kwargs.get("translation_placeholders", {})
 
+        class ConfigEntryError(HomeAssistantError):
+            pass
+
+        class ConfigEntryNotReady(HomeAssistantError):
+            pass
+
         class ServiceValidationError(HomeAssistantError):
             pass
 
+        exc_mod.ConfigEntryError = ConfigEntryError
         exc_mod.ConfigEntryNotReady = ConfigEntryNotReady
         exc_mod.HomeAssistantError = HomeAssistantError
         exc_mod.ServiceValidationError = ServiceValidationError

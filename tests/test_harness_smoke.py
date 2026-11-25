@@ -3,12 +3,12 @@
 import pytest
 
 pytest.importorskip("homeassistant")
-pytest.importorskip("pytest_homeassistant_custom_component")
+pytest.importorskip("pytest_homeassistant")
 
 pytestmark = pytest.mark.requires_ha
 
 
 @pytest.mark.asyncio
-async def test_hass_fixture_boots(hass, enable_custom_integrations) -> None:
-    """Confirms pytest-homeassistant-custom-component fixtures work."""
+async def test_hass_fixture_boots(hass) -> None:
+    """Confirms pytest-homeassistant fixtures work (custom integrations enabled)."""
     assert hass is not None

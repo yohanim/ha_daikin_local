@@ -2,10 +2,12 @@
   "config": {
     "abort": {
       "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
-      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]"
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "not_supported": "Cet adaptateur Daikin n'a pas d'API locale (adaptateur de génération Onecta en firmware antérieur à 2.8.0, ou module Wi-Fi intégré sans contrôle local). Utilisez plutôt l'intégration cloud Daikin Onecta."
     },
     "error": {
       "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "not_supported": "Cet adaptateur Daikin n'a pas d'API locale (adaptateur de génération Onecta en firmware antérieur à 2.8.0, ou module Wi-Fi intégré sans contrôle local). Utilisez plutôt l'intégration cloud Daikin Onecta.",
       "unknown": "[%key:common::config_flow::error::unknown%]",
       "wrong_device": "L'appareil à cette adresse n'est pas la même unité (MAC différent). Vérifiez l'IP ou ajoutez un nouvel appareil."
     },
@@ -163,6 +165,11 @@
     }
   },
   "entity": {
+    "binary_sensor": {
+      "compressor_running": {
+        "name": "Compresseur en marche"
+      }
+    },
     "climate": {
       "daikin": {
         "name": "Climatisation",
@@ -295,8 +302,20 @@
     }
   },
   "exceptions": {
+    "command_rejected": {
+      "message": "L'unité Daikin a refusé la commande (ret={ret}). La valeur est peut-être hors plage ou non prise en charge dans le mode actuel."
+    },
     "error_communicating": {
       "message": "Erreur de communication avec l'appareil Daikin : {error}"
+    },
+    "migration_unknown_version": {
+      "message": "Impossible de migrer cette entrée Daikin Local depuis la version {version} (créée par une version plus récente de l'intégration ?). Supprimez puis ajoutez à nouveau l'appareil."
+    },
+    "not_supported": {
+      "message": "L'adaptateur Daikin à l'adresse {host} n'a pas d'API locale et ne peut pas être utilisé par Daikin Local : {error}"
+    },
+    "setpoint_not_applied": {
+      "message": "L'unité Daikin a accepté la consigne {requested} mais indique {actual}."
     },
     "zone_hvac_mode_unsupported": {
       "message": "La température de zone ne peut être modifiée que lorsque le mode principal est chaud ou froid."

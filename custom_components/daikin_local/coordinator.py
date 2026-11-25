@@ -26,6 +26,7 @@ from .const import (
     ATTR_HEAT_ENERGY,
     ATTR_TOTAL_ENERGY_TODAY,
     ATTR_TOTAL_POWER,
+    COMMAND_TIMEOUT_FACTOR,
     CONF_AUTO_HISTORY_SYNC,
     CONF_ENERGY_GROUP_ID,
     CONF_INSERT_MISSING,
@@ -54,6 +55,12 @@ from .pure import (
     recent_completed_hours_by_local_date as _recent_completed_hours_by_local_date_pure,
 )
 from .utils import calculate_energy_sum, parse_daikin_list
+
+try:
+    # HA 2026.12+: same handling as UpdateFailed, first failure logged at info.
+    from homeassistant.helpers.update_coordinator import UpdateFailedUnreachable
+except ImportError:  # HA 2026.11
+    UpdateFailedUnreachable = UpdateFailed
 
 ERROR_STATS_STORAGE_VERSION = 1
 ERROR_STATS_STORAGE_KEY = f"{DOMAIN}.daily_poll_error_stats"
@@ -117,13 +124,21 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _update_failed_for_poll_error(err: Exception) -> UpdateFailed:
-    """Translated UpdateFailed for persistent coordinator poll failures."""
-    return UpdateFailed(
+    """Translated UpdateFailed for persistent coordinator poll failures.
+
+    Network-level failures (timeouts, connection errors) mean the unit is
+    unreachable: ``UpdateFailedUnreachable`` (HA 2026.12+) logs those at info
+    level. A pydaikin error means the unit answered something unexpected, which
+    stays a plain ``UpdateFailed``.
+    """
+    is_daikin_exception = isinstance(err, DaikinException)
+    error_cls = UpdateFailed if is_daikin_exception else UpdateFailedUnreachable
+    return error_cls(
         translation_domain=DOMAIN,
         translation_key="error_communicating",
         translation_placeholders={
             "error": poll_error_translation_error(
-                err, is_daikin_exception=isinstance(err, DaikinException)
+                err, is_daikin_exception=is_daikin_exception
             )
         },
     )
@@ -375,8 +390,14 @@ class DaikinCoordinator(DataUpdateCoordinator[DaikinData]):
         Without this timeout, a command that never returns (e.g. the adapter drops the
         connection mid-request) would hold the lock forever and every subsequent poll
         would fail waiting for it, leaving the entity permanently unavailable.
+
+        The budget is ``COMMAND_TIMEOUT_FACTOR`` connection timeouts: a pydaikin
+        write chains several requests (pre-read, write, read-back, possibly a
+        whole-degree retry), and cancelling it halfway leaves the outcome unknown.
         """
-        async with asyncio.timeout(self.connection_timeout_sec):
+        async with asyncio.timeout(
+            self.connection_timeout_sec * COMMAND_TIMEOUT_FACTOR
+        ):
             async with self._pydaikin_communication_lock:
                 await command()
 

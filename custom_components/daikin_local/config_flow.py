@@ -23,8 +23,8 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from pydaikin.daikin_base import Appliance
 from pydaikin.daikin_brp069 import DaikinBRP069
-from pydaikin.discovery import Discovery
-from pydaikin.exceptions import DaikinException
+from pydaikin.discovery import Discovery, is_unsupported
+from pydaikin.exceptions import DaikinException, DaikinUnsupportedError
 from pydaikin.factory import DaikinFactory
 
 from .const import (
@@ -39,6 +39,7 @@ from .const import (
     CONF_POLL_INTERVAL_ENERGY_SEC,
     CONF_POLL_INTERVAL_SEC,
     CONF_POLL_INTERVAL_STATE_SEC,
+    CONFIG_ENTRY_VERSION,
     DOMAIN,
     KEY_IS_BRP069,
     KEY_MAC,
@@ -49,22 +50,10 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
-def _optional_visible(key: str, *, default: Any, visible: dict[str, Any]) -> Any:
-    """Optional schema marker shown only while ``visible`` matches (HA 2026.11+).
-
-    Older cores have no ``visible`` support: fall back to a plain, always-shown
-    ``vol.Optional`` so the options form keeps working there.
-    """
-    try:
-        return data_entry_flow.Optional(key, default=default, visible=visible)
-    except (AttributeError, TypeError):
-        return vol.Optional(key, default=default)
-
-
 class FlowHandler(ConfigFlow, domain=DOMAIN):
     """Handle a config flow."""
 
-    VERSION = 6
+    VERSION = CONFIG_ENTRY_VERSION
 
     def __init__(self) -> None:
         """Initialize the Daikin config flow."""
@@ -134,6 +123,15 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
                 data_schema=self.schema,
                 errors={"base": "cannot_connect"},
             )
+        except DaikinUnsupportedError as daikin_exp:
+            _LOGGER.warning(
+                "[config] Daikin adapter at %s has no local API: %s", host, daikin_exp
+            )
+            return self.async_show_form(
+                step_id="user",
+                data_schema=self.schema,
+                errors={"base": "not_supported"},
+            )
         except DaikinException as daikin_exp:
             _LOGGER.error(
                 "[config] Daikin API error while creating device for host=%s "
@@ -199,8 +197,13 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
                 discovery_info.host,
             )
             return self.async_abort(reason="cannot_connect")
-        await self.async_set_unique_id(next(iter(devices))[KEY_MAC])
+        device = next(iter(devices))
+        await self.async_set_unique_id(device[KEY_MAC])
         self._abort_if_unique_id_configured()
+        if is_unsupported(device):
+            # Onecta-generation adapter (protocol DGC, firmware < 2.8) answering
+            # discovery without any local API: offering it would only fail.
+            return self.async_abort(reason="not_supported")
         self.host = discovery_info.host
         return await self.async_step_user()
 
@@ -225,6 +228,8 @@ class FlowHandler(ConfigFlow, domain=DOMAIN):
                     )
             except (TimeoutError, ClientError):
                 errors["base"] = "cannot_connect"
+            except DaikinUnsupportedError:
+                errors["base"] = "not_supported"
             except DaikinException as daikin_exp:
                 _LOGGER.error(
                     "[config] Daikin API error while reconfiguring device for host=%s "
@@ -340,7 +345,7 @@ class OptionsFlowHandler(OptionsFlow):
             vol.Optional(CONF_POLL_INTERVAL_SEC, default=TIMEOUT_SEC): int,
             vol.Optional(CONF_ENERGY_GROUP_ID, default=""): str,
             # Only meaningful once the entry belongs to an energy group.
-            _optional_visible(
+            data_entry_flow.Optional(
                 CONF_ENERGY_GROUP_TOTAL_HISTORY_MASTER,
                 default=False,
                 visible={"field": CONF_ENERGY_GROUP_ID, "operator": "exists"},
@@ -417,7 +422,7 @@ class OptionsFlowHandler(OptionsFlow):
                 # Auto history only: hidden while auto_history_sync is off. Hidden
                 # fields are left out of user_input, so the merge on submit keeps the
                 # previously stored value.
-                _optional_visible(
+                data_entry_flow.Optional(
                     CONF_HISTORY_AUTO_SYNC_GRACE_MINUTES,
                     default=0,
                     visible={"field": CONF_AUTO_HISTORY_SYNC, "value": True},

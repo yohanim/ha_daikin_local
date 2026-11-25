@@ -54,29 +54,54 @@ def _hass() -> SimpleNamespace:
 # ---------------------------------------------------------------------------
 
 
-async def test_unknown_version_returns_false() -> None:
+async def test_unknown_version_raises() -> None:
     mod = load_init_module()
-    result = await mod.async_migrate_entry(_hass(), _entry(version=99))
-    assert result is False
+    with pytest.raises(mod.ConfigEntryError) as raised:
+        await mod.async_migrate_entry(_hass(), _entry(version=99))
+    assert raised.value.translation_key == "migration_unknown_version"
+    assert raised.value.translation_placeholders == {"version": "99"}
 
 
 async def test_unknown_version_does_not_mutate_entry() -> None:
     mod = load_init_module()
     hass = _hass()
-    await mod.async_migrate_entry(hass, _entry(version=99, data={"key": "v"}))
+    with pytest.raises(mod.ConfigEntryError):
+        await mod.async_migrate_entry(hass, _entry(version=99, data={"key": "v"}))
     assert hass._applied == []
 
 
 @pytest.mark.parametrize("version", [1, 2, 3, 4, 5])
-async def test_known_version_returns_true(version: int) -> None:
+async def test_known_version_migrates_to_current_in_one_call(version: int) -> None:
+    """Home Assistant calls the migration once: every step must run in it."""
     mod = load_init_module()
+    hass = _hass()
     entry = _entry(
         version=version,
         data={"api_key": "x", "timeout": 30, "host": "h"},
         options={"history_skip_hours": 2, "history_sync_minutes_after_hour": 5, "timeout": 30},
     )
-    result = await mod.async_migrate_entry(_hass(), entry)
-    assert result is True
+    result = await mod.async_migrate_entry(hass, entry)
+    assert result is None
+    assert entry.version == mod.CONFIG_ENTRY_VERSION
+    assert [step["version"] for step in hass._applied] == list(
+        range(version + 1, mod.CONFIG_ENTRY_VERSION + 1)
+    )
+
+
+async def test_v1_migration_reaches_final_layout() -> None:
+    mod = load_init_module()
+    entry = _entry(
+        version=1,
+        data={"api_key": "s", "timeout": 45, "host": "h", "onecta_client_id": "c"},
+        options={"history_skip_hours": 3},
+    )
+    await mod.async_migrate_entry(_hass(), entry)
+    assert entry.data == {
+        "host": "h",
+        "connection_timeout": 45,
+        "poll_interval_sec": 45,
+    }
+    assert entry.options == {"history_skip_extra_hours": 2}
 
 
 async def test_v1_drops_credential_keys() -> None:
@@ -144,48 +169,3 @@ async def test_async_setup_returns_true_and_calls_setup_services() -> None:
     assert result is True
     assert calls == [1]
 
-
-# ---------------------------------------------------------------------------
-# target_humidity sensor — only created when device exposes the attribute
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    ("support_humidity", "has_target", "expected"),
-    [
-        (True, True, True),
-        (True, False, False),
-        (False, True, False),
-        (False, False, False),
-    ],
-)
-def test_target_humidity_entity_condition(
-    support_humidity: bool, has_target: bool, expected: bool
-) -> None:
-    """Replicates the guard condition from sensor.py async_setup_entry."""
-
-    class _Dev:
-        pass
-
-    dev = _Dev()
-    dev.support_humidity = support_humidity
-    if has_target:
-        dev.target_humidity = 55
-
-    supported = bool(
-        dev.support_humidity and getattr(dev, "target_humidity", None) is not None
-    )
-    assert supported is expected
-
-
-def test_target_humidity_zero_is_valid() -> None:
-    """A target of 0 % is an unusual but valid value; the entity must still be created."""
-
-    class _Dev:
-        support_humidity = True
-        target_humidity = 0
-
-    supported = bool(
-        _Dev.support_humidity and getattr(_Dev, "target_humidity", None) is not None
-    )
-    assert supported is True

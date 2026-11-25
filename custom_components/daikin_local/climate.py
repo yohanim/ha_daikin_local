@@ -24,7 +24,9 @@ from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.restore_state import RestoredExtraData, RestoreEntity
 from pydaikin.daikin_base import Appliance
+from pydaikin.daikin_brp084 import DaikinBRP084
 
 from .const import (
     ATTR_INSIDE_TEMPERATURE,
@@ -32,13 +34,20 @@ from .const import (
     ATTR_STATE_OFF,
     ATTR_STATE_ON,
     ATTR_TARGET_TEMPERATURE,
+    BRP084_TARGET_TEMPERATURE_STEP,
     DAIKIN_ATTR_ADVANCED,
     DOMAIN,
     ZONE_NAME_UNCONFIGURED,
+    ZONE_TARGET_TEMPERATURE_STEP,
 )
 from .coordinator import DaikinConfigEntry, DaikinCoordinator
 from .entity import DaikinEntity
-from .pure import main_climate_temperature_limits
+from .pure import (
+    format_target_temperature,
+    main_climate_temperature_limits,
+    restored_step_status,
+    step_status_extra_data,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -195,56 +204,30 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-def format_target_temperature(target_temperature: float) -> str:
-    """Format target temperature to be sent to the Daikin unit, rounding to nearest half degree."""
-    return str(round(float(target_temperature) * 2, 0) / 2).rstrip("0").rstrip(".")
+def target_temperature_step(device: Appliance) -> float:
+    """Setpoint resolution the unit accepts.
 
-
-class _LegacyTemperatureApiMixin:
-    """Serve the climate temperature API under both its native and legacy names.
-
-    Home Assistant 2026.11 renamed the climate temperature members to
-    ``native_*`` (``native_temperature_unit``, ``native_current_temperature``,
-    ``native_target_temperature``); older cores only read the legacy names.
-    Entities implement the ``native_*`` members, this mixin exposes them under
-    the legacy names too. When a class provides both, 2026.11+ uses the native
-    ones and logs no deprecation, so the same code runs on every supported core.
-
-    Remove this mixin once ``hacs.json`` requires Home Assistant 2026.11+
-    (legacy names stop working in 2027.11).
+    pydaikin knows it for the BRP069 family (0.5, or 1.0 once a half degree was
+    rejected; AirBase 1.0) and reports its generic 1.0 default elsewhere. BRP084
+    is the exception: its protocol encodes setpoints in half degrees.
     """
-
-    _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
-
-    @property
-    def native_current_temperature(self) -> float | None:
-        """Return the current temperature (none unless overridden)."""
-        return None
-
-    @property
-    def native_target_temperature(self) -> float | None:
-        """Return the target temperature (none unless overridden)."""
-        return None
-
-    @property
-    def current_temperature(self) -> float | None:
-        """Legacy alias of ``native_current_temperature`` (HA < 2026.11)."""
-        return self.native_current_temperature
-
-    @property
-    def target_temperature(self) -> float | None:
-        """Legacy alias of ``native_target_temperature`` (HA < 2026.11)."""
-        return self.native_target_temperature
+    if isinstance(device, DaikinBRP084):
+        return BRP084_TARGET_TEMPERATURE_STEP
+    return float(device.target_temperature_step)
 
 
-class DaikinClimate(DaikinEntity, _LegacyTemperatureApiMixin, ClimateEntity):
+def _has_adaptive_step(device: Appliance) -> bool:
+    """True if pydaikin learns the setpoint step at runtime (BRP069/BRP072C)."""
+    return hasattr(type(device), "target_temperature_step_status")
+
+
+class DaikinClimate(DaikinEntity, ClimateEntity, RestoreEntity):
     """Representation of a Daikin HVAC."""
 
     _attr_name = None
     _attr_translation_key = "daikin"
     _attr_hvac_modes: ClassVar[list[str]] = list(HA_STATE_TO_DAIKIN)
-    _attr_target_temperature_step = 0.5
+    _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_fan_modes: list[str]
     _attr_swing_modes: list[str]
 
@@ -301,7 +284,9 @@ class DaikinClimate(DaikinEntity, _LegacyTemperatureApiMixin, ClimateEntity):
             elif attr == ATTR_TEMPERATURE:
                 try:
                     values[HA_ATTR_TO_DAIKIN[ATTR_TARGET_TEMPERATURE]] = (
-                        format_target_temperature(value)
+                        format_target_temperature(
+                            value, target_temperature_step(self.device)
+                        )
                     )
                 except ValueError:
                     _LOGGER.error(
@@ -312,6 +297,40 @@ class DaikinClimate(DaikinEntity, _LegacyTemperatureApiMixin, ClimateEntity):
 
         if values:
             await self._async_execute_command(lambda: self.device.set(values))
+
+    async def async_added_to_hass(self) -> None:
+        """Hand pydaikin back the setpoint step it learned before the restart."""
+        await super().async_added_to_hass()
+        if not _has_adaptive_step(self.device):
+            return
+        last = await self.async_get_last_extra_data()
+        status = restored_step_status(
+            last.as_dict() if last is not None else None, self._firmware
+        )
+        if status is not None:
+            self.device.target_temperature_step_status = status
+
+    @property
+    def extra_restore_state_data(self) -> RestoredExtraData | None:
+        """Persist pydaikin's learned setpoint step, keyed by firmware."""
+        if not _has_adaptive_step(self.device):
+            return None
+        return RestoredExtraData(
+            step_status_extra_data(
+                self.device.target_temperature_step_status, self._firmware
+            )
+        )
+
+    @property
+    def _firmware(self) -> str | None:
+        """Adapter firmware version (``ver``), the key of the learned step."""
+        ver = self.device.values.get("ver", invalidate=False)
+        return str(ver) if ver else None
+
+    @property
+    def target_temperature_step(self) -> float:
+        """Return the setpoint step (may drop to 1.0 once pydaikin infers it)."""
+        return target_temperature_step(self.device)
 
     @property
     def native_current_temperature(self) -> float | None:
@@ -469,12 +488,14 @@ class DaikinClimate(DaikinEntity, _LegacyTemperatureApiMixin, ClimateEntity):
         await self._async_execute_command(lambda: self.device.set({"pow": "0"}))
 
 
-class DaikinZoneClimate(DaikinEntity, _LegacyTemperatureApiMixin, ClimateEntity):
+class DaikinZoneClimate(DaikinEntity, ClimateEntity):
     """Representation of a Daikin zone temperature controller."""
 
     _attr_translation_key = "zone_climate"
     _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
-    _attr_target_temperature_step = 0.5
+    _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
+    # Zone setpoints are sent rounded to whole degrees (see async_set_temperature).
+    _attr_target_temperature_step = ZONE_TARGET_TEMPERATURE_STEP
 
     def __init__(self, coordinator: DaikinCoordinator, zone_id: int) -> None:
         """Initialize the zone climate entity."""

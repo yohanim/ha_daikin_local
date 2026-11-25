@@ -119,7 +119,7 @@ def test_success_without_issue_does_not_delete() -> None:
     delete.assert_not_called()
 
 
-# --- issues helpers (config_entry_id on 2026.11+, fallback before) ---
+# --- issues helpers (tied to the config entry) ---
 
 
 def _issues_module():
@@ -141,26 +141,6 @@ def test_create_issue_passes_config_entry_id() -> None:
     assert kwargs["translation_key"] == "device_unreachable"
     assert kwargs["translation_placeholders"] == {"name": "Salon", "host": "192.0.2.10"}
     assert kwargs["is_fixable"] is False
-
-
-def test_create_issue_falls_back_without_config_entry_id() -> None:
-    """HA < 2026.11 rejects the config_entry_id keyword."""
-    issues = _issues_module()
-    seen: list[dict] = []
-
-    def _legacy_create(hass, domain, issue_id, **kwargs):
-        if "config_entry_id" in kwargs:
-            raise TypeError("unexpected keyword argument 'config_entry_id'")
-        seen.append(kwargs)
-
-    fake_ir = MagicMock()
-    fake_ir.async_create_issue.side_effect = _legacy_create
-    with patch.object(issues, "ir", fake_ir):
-        issues.async_create_unreachable_issue(
-            "hass", "entry-1", name="Salon", host="192.0.2.10"
-        )
-    assert len(seen) == 1
-    assert seen[0]["translation_key"] == "device_unreachable"
 
 
 def test_delete_issue_uses_entry_scoped_id() -> None:

@@ -12,6 +12,8 @@ ATTR_HUMIDITY = "humidity"
 ATTR_COMPRESSOR_FREQUENCY = "compressor_frequency"
 # BRP084 (firmware 2.8.0) outdoor unit compressor temperature; not available on BRP069.
 ATTR_COMPRESSOR_TEMPERATURE = "compressor_temperature"
+# BRP084 compressor run flag (outdoor unit e_2006/p_01, pydaikin>=2.22.0).
+ATTR_COMPRESSOR_RUNNING = "compressor_running"
 
 ATTR_ENERGY_TODAY = "energy_today"
 ATTR_COOL_ENERGY = "cool_energy"
@@ -27,6 +29,9 @@ ATTR_STATE_ON = "on"
 ATTR_STATE_OFF = "off"
 
 KEY_MAC = "mac"
+
+# Config entry schema version (config_flow FlowHandler.VERSION, migrations in __init__).
+CONFIG_ENTRY_VERSION = 6
 
 # Entry data flags (set at config / reconfigure time)
 KEY_IS_BRP069 = "is_brp069"
@@ -75,3 +80,15 @@ DAIKIN_ATTR_ADVANCED = "adv"
 ZONE_NAME_UNCONFIGURED = "-"
 
 TIMEOUT_SEC = 30
+
+# A pydaikin write is several HTTP requests since 2.22.1 (read current state,
+# write, read back a half-degree setpoint, at worst retry once as a whole
+# degree and read back again). The command budget is this many connection
+# timeouts so a slow adapter is not cancelled halfway through a write.
+COMMAND_TIMEOUT_FACTOR = 3
+
+# Zone setpoints are sent as whole degrees (``set_zone`` takes an integer).
+ZONE_TARGET_TEMPERATURE_STEP = 1.0
+# BRP084 encodes setpoints in half degrees (``temp_to_hex`` doubles the value),
+# whatever the generic pydaikin default says.
+BRP084_TARGET_TEMPERATURE_STEP = 0.5

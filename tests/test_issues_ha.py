@@ -1,18 +1,14 @@
-"""Repair issue helpers against the real Home Assistant issue registry.
-
-Runs on both CI harnesses: on the pinned floor (2026.10) it exercises the fallback
-without ``config_entry_id``; on 2026.11+ the issue is tied to the config entry.
-"""
+"""Repair issue helpers against the real Home Assistant issue registry."""
 
 import importlib
 
 import pytest
 
 pytest.importorskip("homeassistant")
-pytest.importorskip("pytest_homeassistant_custom_component")
+pytest.importorskip("pytest_homeassistant")
 
 from homeassistant.helpers import issue_registry as ir
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 pytestmark = pytest.mark.requires_ha
 
@@ -20,7 +16,7 @@ DOMAIN = "daikin_local"
 
 
 @pytest.mark.asyncio
-async def test_unreachable_issue_roundtrip(hass, enable_custom_integrations) -> None:
+async def test_unreachable_issue_roundtrip(hass) -> None:
     issues = importlib.import_module("custom_components.daikin_local.issues")
     entry = MockConfigEntry(domain=DOMAIN, data={"host": "192.0.2.10"})
     entry.add_to_hass(hass)
@@ -34,8 +30,7 @@ async def test_unreachable_issue_roundtrip(hass, enable_custom_integrations) -> 
     assert issue.translation_key == "device_unreachable"
     assert issue.translation_placeholders == {"name": "Salon", "host": "192.0.2.10"}
     assert issue.is_fixable is False
-    if hasattr(issue, "config_entry_id"):  # Home Assistant 2026.11+
-        assert issue.config_entry_id == entry.entry_id
+    assert issue.config_entry_id == entry.entry_id
 
     issues.async_delete_unreachable_issue(hass, entry.entry_id)
     assert registry.async_get_issue(DOMAIN, f"device_unreachable_{entry.entry_id}") is None

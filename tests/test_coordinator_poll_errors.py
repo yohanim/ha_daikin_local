@@ -167,6 +167,8 @@ def test_update_failed_for_poll_error_daikin_exception() -> None:
     assert err.translation_domain == "daikin_local"
     assert err.translation_key == "error_communicating"
     assert err.translation_placeholders == {"error": "cannot reach host"}
+    # The unit answered: a protocol error, not an unreachable device.
+    assert type(err) is mod.UpdateFailed
 
 
 def test_update_failed_for_poll_error_non_daikin_exception() -> None:
@@ -174,6 +176,9 @@ def test_update_failed_for_poll_error_non_daikin_exception() -> None:
     err = mod._update_failed_for_poll_error(TimeoutError())
     assert err.translation_key == "error_communicating"
     assert err.translation_placeholders["error"].startswith("TimeoutError:")
+    # Unreachable (logged at info on HA 2026.12+; plain UpdateFailed before).
+    assert isinstance(err, mod.UpdateFailedUnreachable)
+    assert isinstance(err, mod.UpdateFailed)
 
 
 # --- coordinator._handle_poll_communication_error ---

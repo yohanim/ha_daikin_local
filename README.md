@@ -1,5 +1,9 @@
 # Daikin Local - Home Assistant Integration
 
+[![Open your Home Assistant instance and open this repository in the Marketplace.](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=yohanim&repository=ha_daikin_local&category=integration)
+[![GitHub release](https://img.shields.io/github/v/release/yohanim/ha_daikin_local)](https://github.com/yohanim/ha_daikin_local/releases)
+[![Validate](https://github.com/yohanim/ha_daikin_local/actions/workflows/validate.yml/badge.svg)](https://github.com/yohanim/ha_daikin_local/actions/workflows/validate.yml)
+
 A custom integration for Home Assistant to locally control Daikin air conditioners via their local API. This solution focuses on speed, reliability, and privacy by avoiding any cloud dependency.
 
 ## ✨ Features
@@ -29,6 +33,12 @@ A custom integration for Home Assistant to locally control Daikin air conditione
   - `Adapter LED` switch to turn the Wi-Fi adapter's status LED on/off (disabled by default; only shown when the adapter reports a `led` field, i.e. BRP069A/B/C).
   - `Wi-Fi signal strength` sensor in dBm (disabled by default).
   - The adapter's internal clock is now self-healed: if it reports as unsynced (e.g. adapters not linked to the Daikin cloud, `method=home only`), the integration pushes the current UTC time to it automatically, which previously could leave energy sensors unavailable (`ret=NG (time is not sync)`).
+- **pydaikin 2.24.1** (required since 1.10.0; Home Assistant 2026.11 ships 2.22.1, so the newer version is installed on first start):
+  - **Target temperature step follows the unit**: 0.5 °C on BRP069/BRP072C, 1 °C on AirBase, 0.5 °C on BRP084. If a BRP069 unit rejects a half degree, pydaikin retries once with the value rounded up to the next whole degree and switches the entity to 1 °C steps. What it learned is kept across restarts, until the adapter firmware changes. Zone temperatures use 1 °C steps (zones only accept whole degrees).
+  - **Clear errors on rejected commands**: a setting the unit refuses (`ret=PARAM NG`, out-of-range value, …) now shows "The Daikin unit rejected the command" instead of a generic communication error; a half-degree setpoint the unit accepts but stores differently is reported too.
+  - **Unsupported adapters are detected**: Onecta-generation adapters without a local API (protocol DGC, firmware older than 2.8.0, and built-in Wi-Fi modules without local control) are refused with an explicit message during setup and ignored by discovery.
+  - **BRP084**: `Compressor running` binary sensor (disabled by default), compressor frequency and the idle HVAC action now work on BRP084, a missing indoor temperature no longer breaks polling, and writes are faster (one read less per command).
+  - **Target humidity**: the sensor is created whenever the unit supports a humidity target; it shows *unknown* in modes without one (before, it was not created at all if Home Assistant started while the unit was in such a mode).
 - **Instant Feedback**: State updates immediately in the UI after any setting change (no more waiting for the 30s refresh cycle).
 - **Polling**:
   - Default: recurring updates use pydaikin’s `update_status()` (per device class; for BRP069 with energy this typically means `get_sensor_info`, `get_control_info`, `get_day_power_ex`, `get_week_power` — not the full init resource list, so e.g. year aggregates are not fetched on every poll).
@@ -39,17 +49,19 @@ A custom integration for Home Assistant to locally control Daikin air conditione
 
 ## 🚀 Installation
 
-**Requires Home Assistant 2026.10 or newer** (stay on 1.8.x for older versions). On 2026.11+ the integration uses the native climate temperature API (no deprecation warnings) and the options form hides fields that do not apply (grace period without auto history sync, group master without an energy group); 2026.10 shows every field.
+**Requires Home Assistant 2026.11 or newer** (stay on 1.9.x for 2026.10, 1.8.x for older versions).
 
 ### Via the Marketplace (Recommended)
 
 Since Home Assistant 2026.11, HACS is built in as the **Marketplace**. Existing HACS installs are migrated automatically and keep receiving updates.
 
+Use the **Open in the Marketplace** button at the top of this page, or:
+
 1. Go to **Settings** > **Marketplace**.
-2. Open the menu in the top right corner and add a **custom repository** (requires connecting a GitHub account via device sign-in).
-3. Add the URL of this repository with the category **Integration**.
-4. Search for "Daikin Local" and click **Download**.
-5. Restart Home Assistant.
+2. Select **Add from link** and enter `yohanim/ha_daikin_local` with the category **Integration** (custom repositories require connecting a GitHub account via device sign-in).
+3. Click **Download**. The first install needs no restart: you are taken straight to the setup of the integration.
+
+Updates are offered under **Settings** > **Updates**, with the release notes; **updates still require a restart** (the Marketplace raises a repair with a restart button).
 
 ### Manual Installation
 
@@ -196,15 +208,13 @@ This integration uses the `pydaikin` library to communicate with the devices. It
 
 ### Running the validations locally
 
-On Windows 11 with [WSL Containers](https://learn.microsoft.com/windows/wsl/) (`wslc`), run the same checks as CI (hassfest and the full pytest suite with the Home Assistant harness) in throwaway Linux containers. Like CI, the full suite runs twice: **pinned** (`requirements_test.txt`, Home Assistant at the `hacs.json` floor, exercising the compatibility code paths) and **latest** (`requirements_test_latest.txt`, newest harness, Core and pydaikin):
+On Windows 11 with [WSL Containers](https://learn.microsoft.com/windows/wsl/) (`wslc`), run the same checks as CI (hassfest and the full pytest suite with the Home Assistant harness) in throwaway Linux containers. Like CI, the full suite runs twice: **minimum** (Home Assistant at the `hacs.json` floor, `pydaikin` at the minimum declared in `manifest.json`) and **latest** (newest harness, Core and pydaikin). These versions are not written anywhere else: `scripts/test_requirements.py minimum|latest` derives them from `hacs.json` and `manifest.json`, so raising a floor there is enough; `requirements_test.txt` only lists test tools. The harness is [`pytest-homeassistant`](https://github.com/home-assistant/core/tree/dev/packages/pytest-homeassistant), published by Home Assistant with one release per Core version (it replaces `pytest-homeassistant-custom-component`, which stopped at 2026.10):
 
 ```powershell
-./scripts/validate-local.ps1                              # hassfest + tests (pinned and latest)
-./scripts/validate-local.ps1 -Only hassfest               # or -Only tests
-./scripts/validate-local.ps1 -Only tests -Harness latest  # or -Harness pinned
+./scripts/validate-local.ps1                                # hassfest + tests (minimum and latest)
+./scripts/validate-local.ps1 -Only hassfest                 # or -Only tests
+./scripts/validate-local.ps1 -Only tests -Versions latest   # or -Versions minimum
 ```
-
-When raising the `hacs.json` floor, bump the harness pin in `requirements_test.txt` to the release that pins that Core version.
 
 Without containers, the tests that do not need Home Assistant run in a local venv: `pip install -r requirements_local_tests.txt pytest`, then `pytest -m "not requires_ha"`.
 

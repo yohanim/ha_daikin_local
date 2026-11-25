@@ -15,7 +15,7 @@ import importlib
 import pytest
 
 pytest.importorskip("homeassistant")
-pytest.importorskip("pytest_homeassistant_custom_component")
+pytest.importorskip("pytest_homeassistant")
 
 pytestmark = pytest.mark.requires_ha
 
@@ -30,6 +30,7 @@ PLATFORM_MODULES = (
     "custom_components.daikin_local.diagnostics",
     "custom_components.daikin_local.diagnostics_data",
     "custom_components.daikin_local.services",
+    "custom_components.daikin_local.binary_sensor",
     "custom_components.daikin_local.climate",
     "custom_components.daikin_local.number",
     "custom_components.daikin_local.sensor",

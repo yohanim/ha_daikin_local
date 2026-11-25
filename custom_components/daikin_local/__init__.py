@@ -10,7 +10,7 @@ from aiohttp import ClientConnectionError
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryError, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -18,6 +18,7 @@ from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.helpers.typing import ConfigType
 from pydaikin.daikin_base import Appliance
 from pydaikin.daikin_brp069 import DaikinBRP069
+from pydaikin.exceptions import DaikinException, DaikinUnsupportedError
 from pydaikin.factory import DaikinFactory
 
 from .const import (
@@ -25,6 +26,7 @@ from .const import (
     CONF_HISTORY_SKIP_EXTRA_HOURS,
     CONF_POLL_INTERVAL_SEC,
     CONF_TIMEOUT,
+    CONFIG_ENTRY_VERSION,
     DOMAIN,
     KEY_IS_BRP069,
     KEY_MAC,
@@ -59,7 +61,13 @@ _OBSOLETE_HISTORY_ERROR_UNIQUE_ID_SUFFIXES: tuple[str, ...] = (
     "-daily_history_error",
 )
 
-PLATFORMS = [Platform.CLIMATE, Platform.NUMBER, Platform.SENSOR, Platform.SWITCH]
+PLATFORMS = [
+    Platform.BINARY_SENSOR,
+    Platform.CLIMATE,
+    Platform.NUMBER,
+    Platform.SENSOR,
+    Platform.SWITCH,
+]
 
 _OBSOLETE_CONFIG_KEYS = frozenset({"api_key", "password", "uuid"})
 _LEGACY_OPTION_SKIP_HOURS = "history_skip_hours"
@@ -79,15 +87,19 @@ _DEPRECATED_ONECTA_KEYS = frozenset(
 )
 
 
-async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Migrate config entries (matches config_flow FlowHandler.VERSION)."""
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Migrate config entries up to ``CONFIG_ENTRY_VERSION``.
+
+    Steps run in sequence within one call (each ``async_update_entry`` bumps
+    ``entry.version``): Home Assistant calls this once per setup, so returning
+    after the first step left older entries half-migrated until later restarts.
+    """
     # v1 -> v2: drop legacy credential keys from entry.data
     if entry.version == 1:
         new_data = {
             k: v for k, v in entry.data.items() if k not in _OBSOLETE_CONFIG_KEYS
         }
         hass.config_entries.async_update_entry(entry, data=new_data, version=2)
-        return True
 
     # v2 -> v3: rename history window option to "extra hours" semantics
     if entry.version == 2:
@@ -106,14 +118,12 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             options[CONF_HISTORY_SKIP_EXTRA_HOURS] = extra
 
         hass.config_entries.async_update_entry(entry, options=options, version=3)
-        return True
 
     # v3 -> v4: remove obsolete history_sync_minutes_after_hour (auto history uses polling only)
     if entry.version == 3:
         options = dict(entry.options)
         options.pop("history_sync_minutes_after_hour", None)
         hass.config_entries.async_update_entry(entry, options=options, version=4)
-        return True
 
     # v4 -> v5: split legacy `timeout` into connection vs coordinator refresh interval
     if entry.version == 4:
@@ -135,7 +145,6 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             options=options,
             version=5,
         )
-        return True
 
     # v5 -> v6: remove experimental Onecta cloud fan keys (not supported on main)
     if entry.version == 5:
@@ -155,16 +164,16 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             options=options,
             version=6,
         )
-        return True
 
-    _LOGGER.error(
-        "Cannot migrate config entry from version %s: unknown version (downgrade?)",
-        entry.version,
-    )
-    return False
+    if entry.version != CONFIG_ENTRY_VERSION:
+        raise ConfigEntryError(
+            translation_domain=DOMAIN,
+            translation_key="migration_unknown_version",
+            translation_placeholders={"version": str(entry.version)},
+        )
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> None:
     """Establish connection with Daikin."""
     conf = entry.data
     # For backwards compat, set unique ID
@@ -190,6 +199,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bo
         raise ConfigEntryNotReady from err
     except ClientConnectionError as err:
         _LOGGER.debug("ClientConnectionError to %s", host)
+        raise ConfigEntryNotReady from err
+    except DaikinUnsupportedError as err:
+        # Retrying cannot help: the adapter has no local API (pydaikin>=2.24.0).
+        raise ConfigEntryError(
+            translation_domain=DOMAIN,
+            translation_key="not_supported",
+            translation_placeholders={"host": host, "error": str(err)},
+        ) from err
+    except DaikinException as err:
+        _LOGGER.debug("Daikin API error setting up %s: %s", host, err)
         raise ConfigEntryNotReady from err
 
     # Populate entry flags so OptionsFlow can show relevant fields without requiring reconfigure.
@@ -221,7 +240,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bo
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(update_listener))
-    return True
 
 
 async def update_listener(hass: HomeAssistant, entry: DaikinConfigEntry) -> None:
@@ -229,12 +247,13 @@ async def update_listener(hass: HomeAssistant, entry: DaikinConfigEntry) -> None
     await hass.config_entries.async_reload(entry.entry_id)
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> None:
     """Unload a config entry."""
-    # HA 2026.11+ also drops the issue with the entry; older cores need this
-    # (a reload re-raises it if the unit is still unreachable).
+    # The issue is tied to the entry (deleted when it is removed), but a reload
+    # starts a fresh coordinator that would never clear it: drop it here, the
+    # new coordinator raises it again if the unit is still unreachable.
     async_delete_unreachable_issue(hass, entry.entry_id)
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    await hass.config_entries.async_unload_platforms_or_raise(entry, PLATFORMS)
 
 
 @callback

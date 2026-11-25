@@ -30,6 +30,7 @@ from custom_components.daikin_local.pure import (
     connection_timeout_sec,
     coordinator_poll_interval_sec,
     domain_poll_intervals_sec,
+    format_target_temperature,
     group_has_master,
     history_auto_sync_deferred_by_grace,
     history_skip_hours_from_options,
@@ -37,6 +38,9 @@ from custom_components.daikin_local.pure import (
     lts_row_start_to_datetime_non_str,
     main_climate_temperature_limits,
     recent_completed_hours_by_local_date,
+    restored_step_status,
+    step_status_extra_data,
+    target_humidity_supported,
 )
 
 pytestmark = pytest.mark.local
@@ -237,3 +241,83 @@ def test_main_climate_temperature_limits(
     hvac_mode: str, expected_min: float, expected_max: float
 ) -> None:
     assert main_climate_temperature_limits(hvac_mode) == (expected_min, expected_max)
+
+
+# --- setpoint formatting ---
+
+
+@pytest.mark.parametrize(
+    ("value", "step", "expected"),
+    [
+        (23.5, 0.5, "23.5"),
+        (23.0, 0.5, "23"),
+        (23.24, 0.5, "23"),
+        (23.25, 0.5, "23.5"),  # half up, not banker's rounding
+        (20, 0.5, "20"),
+        (23.5, 1.0, "24"),  # same rounding as pydaikin's whole-degree fallback
+        (22.5, 1.0, "23"),
+        (22.4, 1.0, "22"),
+        ("21.5", 0.5, "21.5"),
+    ],
+)
+def test_format_target_temperature(value, step: float, expected: str) -> None:
+    assert format_target_temperature(value, step) == expected
+
+
+def test_format_target_temperature_rejects_non_numbers() -> None:
+    with pytest.raises(ValueError):
+        format_target_temperature("warm", 0.5)
+
+
+# --- target humidity entity ---
+
+
+@pytest.mark.parametrize(
+    ("support_humidity", "support_target", "expected"),
+    [
+        (True, True, True),
+        (True, False, False),
+        (False, True, False),
+        (False, False, False),
+    ],
+)
+def test_target_humidity_supported(
+    support_humidity: bool, support_target: bool, expected: bool
+) -> None:
+    device = SimpleNamespace(
+        support_humidity=support_humidity, support_target_humidity=support_target
+    )
+    assert target_humidity_supported(device) is expected
+
+
+def test_target_humidity_supported_while_mode_has_no_target() -> None:
+    """Regression (pydaikin 2.22.1): shum=0 reads as None, the entity must stay."""
+    device = SimpleNamespace(
+        support_humidity=True, support_target_humidity=True, target_humidity=None
+    )
+    assert target_humidity_supported(device) is True
+
+
+# --- learned setpoint step (restore state) ---
+
+
+@pytest.mark.parametrize("status", ["confirmed", "inferred"])
+def test_restored_step_status_same_firmware(status: str) -> None:
+    saved = step_status_extra_data(status, "3_3_9")
+    assert restored_step_status(saved, "3_3_9") == status
+
+
+@pytest.mark.parametrize(
+    ("saved", "firmware"),
+    [
+        (None, "3_3_9"),
+        ({}, "3_3_9"),
+        (step_status_extra_data("unknown", "3_3_9"), "3_3_9"),
+        (step_status_extra_data("bogus", "3_3_9"), "3_3_9"),
+        # learned on another firmware: learn again
+        (step_status_extra_data("confirmed", "3_3_8"), "3_3_9"),
+        (step_status_extra_data("inferred", "3_3_9"), None),
+    ],
+)
+def test_restored_step_status_ignored(saved, firmware) -> None:
+    assert restored_step_status(saved, firmware) is None
