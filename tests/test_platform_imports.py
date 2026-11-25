@@ -31,6 +31,7 @@ PLATFORM_MODULES = (
     "custom_components.daikin_local.diagnostics_data",
     "custom_components.daikin_local.services",
     "custom_components.daikin_local.binary_sensor",
+    "custom_components.daikin_local.compat",
     "custom_components.daikin_local.climate",
     "custom_components.daikin_local.number",
     "custom_components.daikin_local.sensor",

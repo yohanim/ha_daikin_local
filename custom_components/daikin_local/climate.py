@@ -28,6 +28,7 @@ from homeassistant.helpers.restore_state import RestoredExtraData, RestoreEntity
 from pydaikin.daikin_base import Appliance
 from pydaikin.daikin_brp084 import DaikinBRP084
 
+from .compat import default_target_temperature_step, has_adaptive_step
 from .const import (
     ATTR_INSIDE_TEMPERATURE,
     ATTR_OUTSIDE_TEMPERATURE,
@@ -213,12 +214,10 @@ def target_temperature_step(device: Appliance) -> float:
     """
     if isinstance(device, DaikinBRP084):
         return BRP084_TARGET_TEMPERATURE_STEP
-    return float(device.target_temperature_step)
-
-
-def _has_adaptive_step(device: Appliance) -> bool:
-    """True if pydaikin learns the setpoint step at runtime (BRP069/BRP072C)."""
-    return hasattr(type(device), "target_temperature_step_status")
+    step = getattr(device, "target_temperature_step", None)
+    if step is None:  # pydaikin < 2.23
+        return default_target_temperature_step(device)
+    return float(step)
 
 
 class DaikinClimate(DaikinEntity, ClimateEntity, RestoreEntity):
@@ -301,7 +300,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity, RestoreEntity):
     async def async_added_to_hass(self) -> None:
         """Hand pydaikin back the setpoint step it learned before the restart."""
         await super().async_added_to_hass()
-        if not _has_adaptive_step(self.device):
+        if not has_adaptive_step(self.device):
             return
         last = await self.async_get_last_extra_data()
         status = restored_step_status(
@@ -313,7 +312,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity, RestoreEntity):
     @property
     def extra_restore_state_data(self) -> RestoredExtraData | None:
         """Persist pydaikin's learned setpoint step, keyed by firmware."""
-        if not _has_adaptive_step(self.device):
+        if not has_adaptive_step(self.device):
             return None
         return RestoredExtraData(
             step_status_extra_data(

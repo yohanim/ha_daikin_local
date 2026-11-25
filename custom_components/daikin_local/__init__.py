@@ -18,9 +18,10 @@ from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC
 from homeassistant.helpers.typing import ConfigType
 from pydaikin.daikin_base import Appliance
 from pydaikin.daikin_brp069 import DaikinBRP069
-from pydaikin.exceptions import DaikinException, DaikinUnsupportedError
+from pydaikin.exceptions import DaikinException
 from pydaikin.factory import DaikinFactory
 
+from .compat import DaikinUnsupportedError
 from .const import (
     CONF_CONNECTION_TIMEOUT,
     CONF_HISTORY_SKIP_EXTRA_HOURS,

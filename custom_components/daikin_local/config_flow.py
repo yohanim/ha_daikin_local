@@ -23,10 +23,11 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from pydaikin.daikin_base import Appliance
 from pydaikin.daikin_brp069 import DaikinBRP069
-from pydaikin.discovery import Discovery, is_unsupported
-from pydaikin.exceptions import DaikinException, DaikinUnsupportedError
+from pydaikin.discovery import Discovery
+from pydaikin.exceptions import DaikinException
 from pydaikin.factory import DaikinFactory
 
+from .compat import DaikinUnsupportedError, is_unsupported
 from .const import (
     CONF_AUTO_HISTORY_SYNC,
     CONF_CONNECTION_TIMEOUT,

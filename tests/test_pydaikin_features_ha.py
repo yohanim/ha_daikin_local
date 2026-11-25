@@ -1,8 +1,11 @@
-"""pydaikin 2.22-2.24 behaviour against real Home Assistant and pydaikin classes.
+"""pydaikin 2.22+ behaviour against real Home Assistant and pydaikin classes.
 
-Covers the adaptive setpoint step (and its restore across restarts), the write
-errors pydaikin raises since 2.22.1, and the BRP084 compressor-running sensor.
-Devices are built with a mock session, so nothing touches the network.
+Covers the setpoint step (adaptive and restored across restarts on pydaikin
+2.23+, fixed per adapter before), the write errors pydaikin raises since
+2.22.1, and the BRP084 compressor-running sensor. Runs on the manifest floor
+(pydaikin 2.22.1) and on the latest pydaikin; tests of features that need a
+newer pydaikin are skipped on older ones. Devices are built with a mock
+session, so nothing touches the network.
 """
 
 from __future__ import annotations
@@ -20,11 +23,7 @@ from homeassistant.helpers.restore_state import RestoredExtraData
 from pydaikin.daikin_airbase import DaikinAirBase
 from pydaikin.daikin_brp069 import DaikinBRP069
 from pydaikin.daikin_brp084 import DaikinBRP084
-from pydaikin.exceptions import (
-    DaikinCommandRejected,
-    DaikinException,
-    DaikinVerificationError,
-)
+from pydaikin.exceptions import DaikinCommandRejected, DaikinException
 
 from custom_components.daikin_local import binary_sensor
 from custom_components.daikin_local.climate import (
@@ -32,11 +31,21 @@ from custom_components.daikin_local.climate import (
     DaikinZoneClimate,
     target_temperature_step,
 )
+from custom_components.daikin_local.compat import (
+    DaikinVerificationError,
+    default_target_temperature_step,
+    has_adaptive_step,
+)
 from custom_components.daikin_local.entity import async_execute_daikin_command
 
 pytestmark = pytest.mark.requires_ha
 
 FIRMWARE = "3_3_9"
+
+ADAPTIVE_STEP = has_adaptive_step(DaikinBRP069("192.0.2.10", session=MagicMock()))
+requires_adaptive_step = pytest.mark.skipif(
+    not ADAPTIVE_STEP, reason="adaptive setpoint step needs pydaikin >= 2.23"
+)
 
 
 def _device(cls, **values):
@@ -54,17 +63,11 @@ def _coordinator(device) -> MagicMock:
     return coordinator
 
 
-# --- setpoint step ---
+# --- setpoint step (any supported pydaikin) ---
 
 
 def test_step_brp069_starts_at_half_degree() -> None:
     assert target_temperature_step(_device(DaikinBRP069)) == 0.5
-
-
-def test_step_brp069_follows_inferred_whole_degree() -> None:
-    device = _device(DaikinBRP069)
-    device.target_temperature_step_status = "inferred"
-    assert target_temperature_step(device) == 1.0
 
 
 def test_step_airbase_is_whole_degree() -> None:
@@ -76,12 +79,16 @@ def test_step_brp084_keeps_half_degree() -> None:
     assert target_temperature_step(_device(DaikinBRP084)) == 0.5
 
 
-def test_climate_entity_exposes_dynamic_step() -> None:
-    device = _device(DaikinBRP069)
-    entity = DaikinClimate(_coordinator(device))
-    assert entity.target_temperature_step == 0.5
-    device.target_temperature_step_status = "inferred"
-    assert entity.target_temperature_step == 1.0
+@pytest.mark.parametrize(
+    ("cls", "expected"),
+    [(DaikinBRP069, 0.5), (DaikinAirBase, 1.0), (DaikinBRP084, 1.0)],
+)
+def test_default_step_table_matches_pydaikin(cls, expected: float) -> None:
+    """The pre-2.23 fallback uses the defaults pydaikin 2.23+ reports."""
+    device = _device(cls)
+    assert default_target_temperature_step(device) == expected
+    if ADAPTIVE_STEP:
+        assert device.target_temperature_step == expected
 
 
 def test_zone_step_is_whole_degree() -> None:
@@ -90,9 +97,26 @@ def test_zone_step_is_whole_degree() -> None:
     assert entity.target_temperature_step == 1.0
 
 
-# --- learned step restored across restarts ---
+# --- adaptive step and its restore (pydaikin >= 2.23) ---
 
 
+@requires_adaptive_step
+def test_step_brp069_follows_inferred_whole_degree() -> None:
+    device = _device(DaikinBRP069)
+    device.target_temperature_step_status = "inferred"
+    assert target_temperature_step(device) == 1.0
+
+
+@requires_adaptive_step
+def test_climate_entity_exposes_dynamic_step() -> None:
+    device = _device(DaikinBRP069)
+    entity = DaikinClimate(_coordinator(device))
+    assert entity.target_temperature_step == 0.5
+    device.target_temperature_step_status = "inferred"
+    assert entity.target_temperature_step == 1.0
+
+
+@requires_adaptive_step
 def test_extra_restore_data_keys_status_by_firmware() -> None:
     device = _device(DaikinBRP069)
     device.target_temperature_step_status = "confirmed"
@@ -104,11 +128,7 @@ def test_extra_restore_data_keys_status_by_firmware() -> None:
     }
 
 
-def test_no_restore_data_without_adaptive_step() -> None:
-    entity = DaikinClimate(_coordinator(_device(DaikinBRP084)))
-    assert entity.extra_restore_state_data is None
-
-
+@requires_adaptive_step
 @pytest.mark.parametrize(
     ("saved_firmware", "expected"),
     [(FIRMWARE, "inferred"), ("3_3_8", "unknown")],
@@ -128,6 +148,12 @@ async def test_added_to_hass_restores_learned_step(
     )
     await entity.async_added_to_hass()
     assert device.target_temperature_step_status == expected
+
+
+def test_no_restore_data_without_adaptive_step() -> None:
+    """BRP084 never learns a step (and BRP069 does not before pydaikin 2.23)."""
+    entity = DaikinClimate(_coordinator(_device(DaikinBRP084)))
+    assert entity.extra_restore_state_data is None
 
 
 # --- write errors (pydaikin >= 2.22.1) ---

@@ -5,12 +5,9 @@ from collections.abc import Awaitable, Callable
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from pydaikin.exceptions import (
-    DaikinCommandRejected,
-    DaikinException,
-    DaikinVerificationError,
-)
+from pydaikin.exceptions import DaikinCommandRejected, DaikinException
 
+from .compat import DaikinVerificationError
 from .const import DOMAIN
 from .coordinator import DaikinCoordinator
 from .pure import poll_error_translation_error

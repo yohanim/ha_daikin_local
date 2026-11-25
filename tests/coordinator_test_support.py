@@ -70,6 +70,14 @@ def install_pydaikin_stubs() -> tuple[type[Exception], type, type]:
     brp_mod.DaikinBRP069 = DaikinBRP069
     sys.modules["pydaikin.daikin_brp069"] = brp_mod
 
+    airbase_mod = types.ModuleType("pydaikin.daikin_airbase")
+
+    class DaikinAirBase(DaikinBRP069):
+        """Stub AirBase appliance type."""
+
+    airbase_mod.DaikinAirBase = DaikinAirBase
+    sys.modules["pydaikin.daikin_airbase"] = airbase_mod
+
     return DaikinException, Appliance, DaikinBRP069
 
 
